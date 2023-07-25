@@ -1,4 +1,4 @@
-from main import APIKey
+from riotApi import APIKey
 from typing import Optional
 import pandas as pd
 import numpy as np

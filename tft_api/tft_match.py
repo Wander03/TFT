@@ -1,4 +1,4 @@
-from main import APIKey
+from riotApi import APIKey
 import pandas as pd
 import requests
 import json
