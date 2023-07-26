@@ -25,10 +25,10 @@ def get_puuid(name: str):
     except:
         print("Player not found.")
 
-def get_match_ids(name: str, num: int):
+def update_match_history(name: str, num: int = 20):
     """
     Input: summonerName, amount of past matches to collect
-    Output: List of past num match ids
+    Output: Data Frame of past num match ids, match datetime, tft set number, game type (ranked, double up, etc.), game version (patch)
     """
     puuid = get_puuid(name)
 
@@ -36,7 +36,18 @@ def get_match_ids(name: str, num: int):
                 f"https://americas.api.riotgames.com/tft/match/v1/matches/by-puuid/{puuid}/ids?count={num}&api_key={api_key}"
                 )
 
-    return(response.json())
+    ids = response.json()
+
+    matches = pd.DataFrame()
+    for id in ids:
+        response = requests.get(f"https://americas.api.riotgames.com/tft/match/v1/matches/{id}?api_key={api_key}")
+        match = response.json()
+        df = pd.json_normalize(match["info"])
+        df["match_id"] = id
+        matches = pd.concat([matches, df], ignore_index=True)
+
+    return(matches["match_id", "game_datetime", "tft_set_number", "tft_game_type", "game_version"])
+
 
 def get_challenger():
     """
@@ -52,7 +63,7 @@ def get_challenger():
 
     return(entries)
 
-def get_match_history(name: str, num: int):
+def get_match_history(name: str, num: int = 20):
     """
     Input: summonerName, amount of past n matches
     Output: Data Frame of name's data from past num matches
@@ -68,3 +79,24 @@ def get_match_history(name: str, num: int):
         matches = pd.concat([matches, df[df["puuid"] == puuid]], ignore_index=True)
 
     return(matches)
+
+def common_traits(traits: dict):
+    """
+    Input: Dictionary of traits
+    Output: List of dominant trait(s) in Dictionary
+    """
+    pass
+
+# def get_stats(name: str, num: int = 20):
+#     """
+#     Input: summonerName, amount of past n matches
+#     Output: statistics about past n matches
+#     """
+#     df_hist = get_match_history(name, int)
+
+    
+#     df_stats = pd.DataFrame(
+#         avg_placement = df_hist["placement"].mean(),
+#         avg_level = df_hist["level"].mean(),
+#         most_played_traits = 
+#         )
