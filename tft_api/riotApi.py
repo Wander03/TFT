@@ -68,4 +68,3 @@ def get_match_history(name: str, num: int):
         matches = pd.concat([matches, df[df["puuid"] == puuid]], ignore_index=True)
 
     return(matches)
-    
