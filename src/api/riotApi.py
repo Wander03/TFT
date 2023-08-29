@@ -25,6 +25,7 @@ def get_puuid(name: str):
     except:
         print("Player not found.")
 
+
 def update_match_history(name: str, num: int = 20):
     """
     Input: summonerName, amount of past matches to collect
@@ -63,6 +64,7 @@ def get_challenger():
 
     return(entries)
 
+
 def get_match_history(name: str, num: int = 20):
     """
     Input: summonerName, amount of past n matches
@@ -80,12 +82,14 @@ def get_match_history(name: str, num: int = 20):
 
     return(matches)
 
+
 def common_traits(traits: dict):
     """
     Input: Dictionary of traits
     Output: List of dominant trait(s) in Dictionary
     """
     pass
+
 
 # def get_stats(name: str, num: int = 20):
 #     """

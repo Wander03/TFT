@@ -1,5 +1,5 @@
 import riotApi
-import src.database as db
+import database as db
 import pandas as pd
 
 
