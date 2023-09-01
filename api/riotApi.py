@@ -40,6 +40,7 @@ def update_match_history(name: str, num: int = 20):
     ids = response.json()
 
     matches = pd.DataFrame()
+
     for id in ids:
         response = requests.get(f"https://americas.api.riotgames.com/tft/match/v1/matches/{id}?api_key={api_key}")
         match = response.json()
@@ -47,7 +48,7 @@ def update_match_history(name: str, num: int = 20):
         df["match_id"] = id
         matches = pd.concat([matches, df], ignore_index=True)
 
-    return(matches["match_id", "game_datetime", "tft_set_number", "tft_game_type", "game_version"])
+    return(matches[["match_id", "game_datetime", "tft_set_number", "tft_game_type", "game_version"]])
 
 
 def get_challenger():
