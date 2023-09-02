@@ -1,21 +1,31 @@
 from api import riotApi
 from sql import database as db
+import time
 import pandas as pd
 
 
 # pd.set_option("display.max_columns", None)
 
 
-def main():
+def save_new_matches(num = 10):
     with db.engine.begin() as conn:
-        df_hist = riotApi.update_match_history("Wanderr", 6)
+        # get matches
+        df_hist = riotApi.update_match_history("Wanderr", num)
         dict_hist = df_hist.to_dict(orient="records")
 
-        for val in dict_hist:
+        # check for already existing match_ids
+        existing_ids = conn.execute(db.sa.select(db.match_history.c.match_id))
+        existing_ids = set(row[0] for row in existing_ids)
+
+        data_to_insert = [data for data in dict_hist if data['match_id'] not in existing_ids]
+
+        # add new matches
+        for val in data_to_insert:
             conn.execute(db.match_history.insert().values(val))
 
 if __name__ == "__main__":
-    main()
+    save_new_matches(100)
+    time.sleep(1)
 
 
-# TODO: modify update match history to add all new matches and not crash if a match is already added
+# TODO: get matches and get data from matches (new table)

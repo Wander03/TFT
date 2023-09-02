@@ -38,7 +38,7 @@ def update_match_history(name: str, num: int = 20):
                 )
 
     ids = response.json()
-
+    print(ids)
     matches = pd.DataFrame()
 
     for id in ids:

@@ -1,3 +1,3 @@
 from riotApi import *
 
-update_match_history("Wanderr", 2)
+print(update_match_history("Wanderr", 50))
