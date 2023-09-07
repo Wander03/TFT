@@ -1,5 +1,6 @@
 from riotApi import *
 import time
+import pandas as pd
 
 p = "4pnGHS5xYfTogigUBzqp-jtPuCKs02UNXI82obZiA6Qdxw6hP5hvQOhHQF-qio4F3NIWS2SUQXnc5Q"
 
@@ -17,5 +18,38 @@ p = "4pnGHS5xYfTogigUBzqp-jtPuCKs02UNXI82obZiA6Qdxw6hP5hvQOhHQF-qio4F3NIWS2SUQXn
 
 # print(get_challenger())
 
-a = get_match_ids(puuid=p, start = 0, count = 300)
-print(len(a))
+# print(get_rank_info("5jZkUKn072Xf-SdHeWeHzXOQuUoCYnOaCfSz8RQss2chTww"))
+
+print(get_challenger())
+
+# a = get_rank_info("Vs1Qo-vA77mWZMMDUB94tA_H-s8B3KO1AQ17VvITIzDvlC8")
+# print(a)
+
+# a = pd.json_normalize([
+#     {
+#         "queueType": "RANKED_TFT_TURBO",
+#         "ratedTier": "PURPLE",
+#         "ratedRating": 3930,
+#         "summonerId": "47-7_Ey3hpKdcCYWslWICq-NrNxDUt051-OGPu287DjhGWVUe9WUjt0dsA",
+#         "summonerName": "nobodysbot",
+#         "wins": 34,
+#         "losses": 7
+#     },
+#     {
+#         "leagueId": "edff2ebf-a8d4-3ba2-96a7-86808dc072b1",
+#         "queueType": "RANKED_TFT",
+#         "tier": "MASTER",
+#         "rank": "I",
+#         "summonerId": "47-7_Ey3hpKdcCYWslWICq-NrNxDUt051-OGPu287DjhGWVUe9WUjt0dsA",
+#         "summonerName": "nobodysbot",
+#         "leaguePoints": 145,
+#         "wins": 208,
+#         "losses": 171,
+#         "veteran": False,
+#         "inactive": False,
+#         "freshBlood": False,
+#         "hotStreak": False
+#     }
+# ])
+
+# print(a)
