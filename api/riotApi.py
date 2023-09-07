@@ -10,57 +10,120 @@ load_dotenv()
 api_key = os.environ.get("RIOT_KEY")
 
 
-def get_puuid(name: str):
+def get_summoner(name: str = None, puuid: str = None, r_puuid: bool = True, r_name: bool = False):
     """
-    Input: summonerName (for NA)
-    Output: puuid
+    Input: summonerName and/or puuid (for NA), what you want returned from the function
+    Output: summonderName and/or puuid (or nothing if you really want)
     """
     try:
-        response = requests.get(
-            f"https://na1.api.riotgames.com/lol/summoner/v4/summoners/by-name/{name}?api_key={api_key}"
-            )
+        if(name):
+            response = requests.get(
+                f"https://na1.api.riotgames.com/tft/summoner/v1/summoners/by-name/{name}?api_key={api_key}"
+                )
+            
+        else:
+            response = requests.get(
+                f"https://na1.api.riotgames.com/tft/summoner/v1/summoners/by-puuid/{puuid}?api_key={api_key}"
+                )
         
         player = json.loads(response.text)
 
-        return(pd.json_normalize(player)["puuid"][0])
+        if(r_name and r_puuid):
+            return(pd.json_normalize(player)["name"][0], pd.json_normalize(player)["puuid"][0])
+        elif(r_puuid):
+            return(pd.json_normalize(player)["puuid"][0])
+        elif(r_name):
+            return(pd.json_normalize(player)["name"][0])
     except:
-        print("Player not found.")
+        print("Player not found")
 
+def get_match_ids(name: str = None, puuid: str = None, start: int = 0, count: int = 20):
+    """
+    Input: summonerName, puuid (optional, reduced API calls), amount of past matches to collect (max 200)
+    Output: List of match ids
+    """
+    if(count > 200):
+        print("API can only return 200 match ids at a time")
+        return
 
-def update_match_history(name: str, start:int = 0, count: int = 20):
-    """
-    Input: summonerName, amount of past matches to collect
-    Output: Data Frame of past num match ids, match datetime, match length, tft set number, game type (ranked, double up, etc.), game version (patch)
-    """
-    puuid = get_puuid(name)
+    if(puuid is None):
+        puuid = get_summoner(name)
 
     response = requests.get(
                 f"https://americas.api.riotgames.com/tft/match/v1/matches/by-puuid/{puuid}/ids?start={start}&count={count}&api_key={api_key}"
                 )
     
     if(response.status_code != 200):
-        print("Getting Match Ids")
+        print("Error Getting Match Ids")
         print(response.status_code)
-        exit()
+        return
 
-    ids = response.json()
+    return(response.json())
+
+def get_match_history(match_ids: list):
+    """
+    Input: list of match ids
+    Output: Data Frame of past num match ids, match datetime, match length, tft set number, game type (ranked, double up, etc.), game version (patch)
+    """
     matches = pd.DataFrame()
+    count = 0
 
-    for id in ids:
+    for id in match_ids:
         response = requests.get(f"https://americas.api.riotgames.com/tft/match/v1/matches/{id}?api_key={api_key}")
 
         if(response.status_code != 200):
-            print("Getting Matches")
+            print(f"Error Getting Matches\nCollected: {count}")
             print(response.status_code)
-            exit()
+            return(matches[["match_id", "game_datetime", "game_length", "tft_set_number", "tft_set_core_name", "tft_game_type", "game_version"]])
 
         match = response.json()
         df = pd.json_normalize(match["info"])
         df["match_id"] = id
         matches = pd.concat([matches, df], ignore_index=True)
+        count += 1
+
+        if(count % 99 == 0):
+            print(f"Completed: {count} ({round(count / len(match_ids), 2) * 100}%)")
+            time.sleep(121)
 
     return(matches[["match_id", "game_datetime", "game_length", "tft_set_number", "tft_set_core_name", "tft_game_type", "game_version"]])
 
+def get_match_info(match_ids: list, name: str = None, puuid: str = None):
+    """
+    Input: ist of match ids, can filter by summonerName/puuid
+    Output: Data Frame of name's data from match ids in provided list
+    """
+    if(puuid is None and name is not None):
+        puuid = get_summoner(name)
+
+    matches = pd.DataFrame()
+    count = 0
+
+    for id in match_ids:
+        response = requests.get(f"https://americas.api.riotgames.com/tft/match/v1/matches/{id}?api_key={api_key}")
+        match = response.json()
+        df = pd.json_normalize(match["info"]["participants"])
+        df["match_id"] = id
+
+        if(name is not None and puuid is not None):
+            matches = pd.concat([matches, df[df["puuid"] == puuid]], ignore_index=True)
+        else:
+            matches = pd.concat([matches, df], ignore_index=True)
+                                
+        count += 1
+        if(count % 99 == 0):
+            print(f"Completed: {count} ({round(count / len(match_ids), 2) * 100}%)")
+            time.sleep(121)
+
+    matches['augment_1'] = matches['augments'].apply(lambda x: x[0] if len(x) > 0 else None)
+    matches['augment_2'] = matches['augments'].apply(lambda x: x[1] if len(x) > 1 else None)
+    matches['augment_3'] = matches['augments'].apply(lambda x: x[2] if len(x) > 2 else None)
+
+    matches['traits'] = matches['traits'].apply(lambda x: x[0] if len(x) > 0 else None)
+    matches['units'] = matches['units'].apply(lambda x: x[0] if len(x) > 0 else None)
+
+    return(matches[["match_id", "placement", "level", "last_round", "gold_left", "players_eliminated", 
+                    "total_damage_to_players", "augment_1", "augment_2", "augment_3", "traits", "units"]])
 
 def get_challenger():
     """
@@ -77,36 +140,12 @@ def get_challenger():
     return(entries)
 
 
-def get_match_info(name: str, match_ids: list):
-    """
-    Input: summonerName, list of match ids
-    Output: Data Frame of name's data from match ids in provided list
-    """
-    puuid = get_puuid(name)
-
-    matches = pd.DataFrame()
-    count = 0
-
-    for id in match_ids:
-        response = requests.get(f"https://americas.api.riotgames.com/tft/match/v1/matches/{id}?api_key={api_key}")
-        match = response.json()
-        df = pd.json_normalize(match["info"]["participants"])
-        df["match_id"] = id
-        matches = pd.concat([matches, df[df["puuid"] == puuid]], ignore_index=True)
-        count += 1
-        if(count % 99 == 0):
-            print(f"Completed: {count} ({count - 99}, {count})")
-            time.sleep(121)
-
-    return(matches[["match_id", "placement", "level", "last_round", "gold_left", "players_eliminated", "total_damage_to_players", "traits", "units", "augments"]])
-
-
-def common_traits(traits: dict):
-    """
-    Input: Dictionary of traits
-    Output: List of dominant trait(s) in Dictionary
-    """
-    pass
+# def common_traits(traits: dict):
+#     """
+#     Input: Dictionary of traits
+#     Output: List of dominant trait(s) in Dictionary
+#     """
+#     pass
 
 
 # def get_stats(name: str, num: int = 20):

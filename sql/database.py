@@ -21,5 +21,7 @@ engine = sa.create_engine(database_connection_url())
 metadata_obj = sa.MetaData()
 
 # Load tables
-my_match_history = sa.Table("my_match_history", metadata_obj, autoload_with=engine)
-my_match_info = sa.Table("my_match_info", metadata_obj, autoload_with=engine)
+match_history = sa.Table("match_history", metadata_obj, autoload_with=engine)
+match_info = sa.Table("match_info", metadata_obj, autoload_with=engine)
+players = sa.Table("players", metadata_obj, autoload_with=engine)
+rank_info = sa.Table("rank_info", metadata_obj, autoload_with=engine)
