@@ -20,7 +20,7 @@ p = "4pnGHS5xYfTogigUBzqp-jtPuCKs02UNXI82obZiA6Qdxw6hP5hvQOhHQF-qio4F3NIWS2SUQXn
 
 # print(get_rank_info("5jZkUKn072Xf-SdHeWeHzXOQuUoCYnOaCfSz8RQss2chTww"))
 
-print(get_challenger())
+# print(get_rank_info("r-TLR9BoJiNJRKgOvcPbs-lB8p8BXXxE1INPbMx_6skwPXY"))
 
 # a = get_rank_info("Vs1Qo-vA77mWZMMDUB94tA_H-s8B3KO1AQ17VvITIzDvlC8")
 # print(a)

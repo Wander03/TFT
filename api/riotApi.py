@@ -51,7 +51,10 @@ def get_rank_info(summonder_id: str):
     rank_info = response.json()
     df_rank_info = pd.json_normalize(rank_info)
 
+    # if unranked (1: no ranking in anything; 2: ranking in hyperroll but not ranked)
     if(len(df_rank_info) == 0):
+        return(pd.DataFrame({"tier": ["UNRANKED"], "rank": ["I"], "leaguePoints": [0], "wins": [0], "losses": [0]}))
+    if((df_rank_info[df_rank_info["queueType"] == "RANKED_TFT"]).empty):
         return(pd.DataFrame({"tier": ["UNRANKED"], "rank": ["I"], "leaguePoints": [0], "wins": [0], "losses": [0]}))
 
     df_rank_info = df_rank_info[df_rank_info["queueType"] == "RANKED_TFT"]
@@ -168,7 +171,7 @@ def get_match_history_info(match_ids: list, name: str = None, puuid: str = None)
 
 def get_challenger():
     """
-    Output: Data Frame of Challenger players ordered from most to least lp
+    Output: Data Frame of Challenger players
     """
     response = call_api(
                 f"https://na1.api.riotgames.com/tft/league/v1/challenger?api_key={api_key}"
@@ -176,7 +179,7 @@ def get_challenger():
 
     response = response.json()["entries"]
 
-    entries = pd.json_normalize(response).sort_values("leaguePoints", ascending=False)
+    entries = pd.json_normalize(response)
 
     return(entries)
 
