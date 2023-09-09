@@ -1,7 +1,9 @@
 from api import riotApi
 from sql import database as db
 from datetime import datetime
+import time
 import pandas as pd
+
 
 def add_update_player(name: str = None, puuid: str = None):
     """
@@ -141,9 +143,9 @@ def get_full_history_info(name: str = None, puuid: str = None):
         df_hist, df_info = riotApi.get_match_history_info(ids_to_insert, puuid = puuid)
 
         # check if all players are in players table
-        # for row in df_info.iterrows():
-        #     add_update_player(puuid = row[1]["puuid"])
-        #     print(f"Adding/Updating Players: {row[0]} ({round(row[0] / len(df_info), 2) * 100}%)")
+        for row in df_info.iterrows():
+            add_update_player(puuid = row[1]["puuid"])
+            print(f"Adding/Updating Players: {row[0]} ({round(row[0] / len(df_info), 2) * 100}%)")
 
         for val in df_hist.iterrows():
             conn.execute(db.match_history.insert().values(val[1]))
@@ -181,4 +183,4 @@ if __name__ == "__main__":
     print("===================================================================================")
     
 
-# TODO: crawling to get match data
+# TODO: crawling to get match data | get n matchs from specificed players history (getting full 1,000 takes a while)
