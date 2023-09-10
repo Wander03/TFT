@@ -24,14 +24,12 @@ def call_api(url):
 def get_summoner(name: str = None, puuid: str = None, s_id: str = None, all: bool = False):
     """
     Input: summonerName and/or puuid (for NA), what you want returned from the function
+
+    Order is important, check name as last resort since names can change
+
     Output: summonerName and puuid and summonerId or just puuid
     """
-    if(name):
-        response = call_api(
-            f"https://na1.api.riotgames.com/tft/summoner/v1/summoners/by-name/{name}?api_key={api_key}"
-            )
-        
-    elif(puuid):
+    if(puuid):
         response = call_api(
             f"https://na1.api.riotgames.com/tft/summoner/v1/summoners/by-puuid/{puuid}?api_key={api_key}"
             )
@@ -39,15 +37,24 @@ def get_summoner(name: str = None, puuid: str = None, s_id: str = None, all: boo
         response = call_api(
             f"https://na1.api.riotgames.com/tft/summoner/v1/summoners/{s_id}?api_key={api_key}"
             )
+    elif(name):
+        response = call_api(
+            f"https://na1.api.riotgames.com/tft/summoner/v1/summoners/by-name/{name}?api_key={api_key}"
+            )
     else:
         print("Please add an identifier")
     
     player = json.loads(response.text)
 
-    if(all):
-        return(pd.json_normalize(player)["name"][0], pd.json_normalize(player)["puuid"][0], pd.json_normalize(player)["id"][0])
-    else:
-        return(pd.json_normalize(player)["puuid"][0])
+    try:
+        if(all):
+            return(pd.json_normalize(player)["name"][0], pd.json_normalize(player)["puuid"][0], pd.json_normalize(player)["id"][0])
+        else:
+            return(pd.json_normalize(player)["puuid"][0])
+    except Exception as e:
+        print(name, puuid, s_id)
+        print(player)
+        print(e)
 
 def get_rank_info(summonder_id: str):
     """
@@ -80,7 +87,7 @@ def get_queue_from_id(id):
         1180: "SOUL BRAWL",
     }
 
-    return(queue_dict[id] if id in queue_dict else "UNKNOWN")
+    return(queue_dict[id] if id in queue_dict else id)
     
 def get_match_ids(name: str = None, puuid: str = None, start: int = 0, count: int = 20):
     """

@@ -6,27 +6,22 @@ from alive_progress import alive_bar
 import pandas as pd
 
 
+# to not update recently updated players (saves api calls)
+# BOT is the puuid of the fake players in the tutorial
+updated_players = {"BOT"}
+
 def add_update_player(name: str = None, puuid: str = None, s_id: str = None):
     """
     Checks if a player is in SQL, if not add them (and update ranked data while we are at it)!
 
-    DO NOT CHECK VIA NAME, THESE CAN CHANGE
+    TRY NOT TO CHECK VIA NAME, THESE CAN CHANGE
     """
     with db.engine.begin() as conn:
-        # get/add puuid
-        if(puuid is None):
-            if(name):
-                name, puuid, summoner_id = riotApi.get_summoner(name, all = True)
-            else:
-                name, puuid, summoner_id = riotApi.get_summoner(s_id = s_id, all = True)
-
+        # get all info (even if all is provided in case of name change)
+        name, puuid, summoner_id = riotApi.get_summoner(name, puuid, s_id, all = True)
         check_player = conn.execute(db.sa.select(db.players).where(db.players.c.puuid == puuid)).fetchone()
 
         if(check_player is None):
-            # if provided only puuid. no name. and is not in SQL
-            if(name is None):
-                name, puuid, summoner_id = riotApi.get_summoner(puuid = puuid, all = True)
-
             conn.execute(db.players.insert().values({"puuid": puuid, "name": name, "id": summoner_id}))
 
             df_rank_info = riotApi.get_rank_info(summoner_id)
@@ -40,9 +35,6 @@ def add_update_player(name: str = None, puuid: str = None, s_id: str = None):
                                 "bot_fours": int(df_rank_info["losses"][0]),
                                 "last_updated": datetime.utcnow()}))
         else:
-            name = check_player[1]
-            summoner_id = check_player[2]
-
             df_rank_info = riotApi.get_rank_info(summoner_id)
             conn.execute(db.rank_info.
                          update().
@@ -116,7 +108,9 @@ def get_n_history_info(name: str = None, puuid: str = None, s_id: str = None, n:
         print(f"Adding/Updating Players")
         with alive_bar(len(df_info)) as bar:
             for row in df_info.iterrows():
-                add_update_player(puuid = row[1]["puuid"])
+                if(row[1]["puuid"] not in updated_players):
+                    add_update_player(puuid = row[1]["puuid"])
+                    updated_players.add(row[1]["puuid"])
                 bar()
 
         print(f"Adding History")
@@ -128,7 +122,8 @@ def get_n_history_info(name: str = None, puuid: str = None, s_id: str = None, n:
         print(f"Adding Info")
         with alive_bar(len(df_info)) as bar:
             for val in df_info.iterrows():
-                conn.execute(db.match_info.insert().values(val[1]))
+                if(val[1]["puuid"] != "BOT"):
+                    conn.execute(db.match_info.insert().values(val[1]))
                 bar()
 
 def crawl_chally(n: int = 1):
@@ -139,14 +134,14 @@ def crawl_chally(n: int = 1):
 
     for player in df_chally.iterrows():
         print("-----------------------------------------------------------------------------------")
-        print(f"Player {player[0] + 1} / {len(df_chally)}: {player[1]['summonerName']}")
+        print(f"Player {player[0] + 1}/{len(df_chally)}: {player[1]['summonerName']}")
         get_n_history_info(s_id = player[1]["summonerId"], n = n)
     print("-----------------------------------------------------------------------------------")
 
-def update_me():
+def update_player(name: str = None, puuid: str = None, s_id: str = None, n: int = 1000):
     print("===================================================================================")
     start = datetime.now()
-    get_n_history_info("Wanderr")
+    get_n_history_info(name, puuid, s_id, n)
     print("===================================================================================")
     print(f"Began: {start}\nEnded: {datetime.now()}")
     print("===================================================================================")
@@ -160,7 +155,8 @@ def get_chally(n: int = 1):
     print("===================================================================================")   
 
 if __name__ == "__main__":
-    get_chally(20)
+    # get_chally(20)
+    update_player("Helop")
     
 
 # TODO: crawling to get match data | get n matchs from specificed players history (getting full 1,000 takes a while)
