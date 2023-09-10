@@ -4,6 +4,8 @@ import requests
 from ratelimit import limits, sleep_and_retry
 import json
 import pandas as pd
+import time
+from alive_progress import alive_bar
 
 
 load_dotenv()
@@ -19,7 +21,7 @@ def call_api(url):
 
     return response
 
-def get_summoner(name: str = None, puuid: str = None, all: bool = False):
+def get_summoner(name: str = None, puuid: str = None, s_id: str = None, all: bool = False):
     """
     Input: summonerName and/or puuid (for NA), what you want returned from the function
     Output: summonerName and puuid and summonerId or just puuid
@@ -29,10 +31,16 @@ def get_summoner(name: str = None, puuid: str = None, all: bool = False):
             f"https://na1.api.riotgames.com/tft/summoner/v1/summoners/by-name/{name}?api_key={api_key}"
             )
         
-    else:
+    elif(puuid):
         response = call_api(
             f"https://na1.api.riotgames.com/tft/summoner/v1/summoners/by-puuid/{puuid}?api_key={api_key}"
             )
+    elif(s_id):
+        response = call_api(
+            f"https://na1.api.riotgames.com/tft/summoner/v1/summoners/{s_id}?api_key={api_key}"
+            )
+    else:
+        print("Please add an identifier")
     
     player = json.loads(response.text)
 
@@ -62,7 +70,18 @@ def get_rank_info(summonder_id: str):
 
     return(df_rank_info[["tier", "rank", "leaguePoints", "wins", "losses"]])
 
+def get_queue_from_id(id):
+    queue_dict = {
+        1090: "NORMAL",
+        1100: "RANKED",
+        1110: "TUTORIAL",
+        1160: "DOUBLE UP",
+        1170: "FORTUNE'S FAVOR",
+        1180: "SOUL BRAWL",
+    }
 
+    return(queue_dict[id] if id in queue_dict else "UNKNOWN")
+    
 def get_match_ids(name: str = None, puuid: str = None, start: int = 0, count: int = 20):
     """
     Input: summonerName, puuid (optional, reduced API calls), amount of past matches to collect (max 200)
@@ -93,6 +112,7 @@ def get_match_history(match_ids: list):
         match = response.json()
         df = pd.json_normalize(match["info"])
         df["match_id"] = id
+        df["tft_game_type"] = get_queue_from_id(df["queue_id"][0])
         matches = pd.concat([matches, df], ignore_index=True)
         count += 1
 
@@ -140,22 +160,23 @@ def get_match_history_info(match_ids: list, name: str = None, puuid: str = None)
     
     df_match_history = pd.DataFrame()
     df_match_info = pd.DataFrame()
-    count = 0
 
-    for id in match_ids:
-        response = call_api(f"https://americas.api.riotgames.com/tft/match/v1/matches/{id}?api_key={api_key}")
+    print("Getting History/Info")
+    with alive_bar(len(match_ids)) as bar:
+        for id in match_ids:
+            response = call_api(f"https://americas.api.riotgames.com/tft/match/v1/matches/{id}?api_key={api_key}")
 
-        match = response.json()
-        df_hist = pd.json_normalize(match["info"])
-        df_info = pd.json_normalize(match["info"]["participants"])
-        df_hist["match_id"] = id
-        df_info["match_id"] = id
+            match = response.json()
+            df_hist = pd.json_normalize(match["info"])
+            df_info = pd.json_normalize(match["info"]["participants"])
+            df_hist["match_id"] = id
+            df_hist["tft_game_type"] = get_queue_from_id(df_hist["queue_id"][0])
+            df_info["match_id"] = id
 
-        df_match_history = pd.concat([df_match_history, df_hist], ignore_index=True)
-        df_match_info = pd.concat([df_match_info, df_info], ignore_index=True)
+            df_match_history = pd.concat([df_match_history, df_hist], ignore_index=True)
+            df_match_info = pd.concat([df_match_info, df_info], ignore_index=True)
 
-        count += 1
-        print(f"Getting History/Info: {count} ({round(count / len(match_ids), 2) * 100}%)")
+            bar()
 
     df_match_info['augment_1'] = df_match_info['augments'].apply(lambda x: x[0] if len(x) > 0 else None)
     df_match_info['augment_2'] = df_match_info['augments'].apply(lambda x: x[1] if len(x) > 1 else None)

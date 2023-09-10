@@ -1,5 +1,6 @@
 from riotApi import *
 import time
+from alive_progress import alive_bar
 import pandas as pd
 
 p = "4pnGHS5xYfTogigUBzqp-jtPuCKs02UNXI82obZiA6Qdxw6hP5hvQOhHQF-qio4F3NIWS2SUQXnc5Q"
@@ -13,7 +14,7 @@ p = "4pnGHS5xYfTogigUBzqp-jtPuCKs02UNXI82obZiA6Qdxw6hP5hvQOhHQF-qio4F3NIWS2SUQXn
 #     f = False
 # print(count)
 
-# a = get_match_info(["NA1_4759160721"])
+# a = get_match_info([""])
 # print(a["traits"][0])
 
 # print(get_challenger())
@@ -53,3 +54,10 @@ p = "4pnGHS5xYfTogigUBzqp-jtPuCKs02UNXI82obZiA6Qdxw6hP5hvQOhHQF-qio4F3NIWS2SUQXn
 # ])
 
 # print(a)
+
+a = pd.DataFrame(range(1000))
+
+with alive_bar(len(a)) as bar:
+    for _ in a.iterrows():
+        time.sleep(.1)
+        bar()

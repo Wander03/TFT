@@ -2,35 +2,34 @@ from api import riotApi
 from sql import database as db
 from datetime import datetime
 import time
+from alive_progress import alive_bar
 import pandas as pd
 
 
-def add_update_player(name: str = None, puuid: str = None):
+def add_update_player(name: str = None, puuid: str = None, s_id: str = None):
     """
     Checks if a player is in SQL, if not add them (and update ranked data while we are at it)!
+
+    DO NOT CHECK VIA NAME, THESE CAN CHANGE
     """
     with db.engine.begin() as conn:
         # get/add puuid
         if(puuid is None):
-            check_player = conn.execute(db.sa.select(db.players).where(db.players.c.name == name)).fetchone()
-        else:
-            check_player = conn.execute(db.sa.select(db.players).where(db.players.c.puuid == puuid)).fetchone()
-
-        flag = False
-        if(check_player is None):
-            if(name is not None):
+            if(name):
                 name, puuid, summoner_id = riotApi.get_summoner(name, all = True)
             else:
-                name, puuid, summoner_id = riotApi.get_summoner(puuid = puuid, all = True)
-            conn.execute(db.players.insert().values({"puuid": puuid, "name": name, "id": summoner_id}))
-            flag = True
-        else:
-            puuid = check_player[0]
-            summoner_id = check_player[2]
+                name, puuid, summoner_id = riotApi.get_summoner(s_id = s_id, all = True)
 
-        # add/update rank info
-        df_rank_info = riotApi.get_rank_info(summoner_id)
-        if(flag):
+        check_player = conn.execute(db.sa.select(db.players).where(db.players.c.puuid == puuid)).fetchone()
+
+        if(check_player is None):
+            # if provided only puuid. no name. and is not in SQL
+            if(name is None):
+                name, puuid, summoner_id = riotApi.get_summoner(puuid = puuid, all = True)
+
+            conn.execute(db.players.insert().values({"puuid": puuid, "name": name, "id": summoner_id}))
+
+            df_rank_info = riotApi.get_rank_info(summoner_id)
             conn.execute(db.rank_info.
                         insert().
                         values({"puuid": puuid, 
@@ -41,6 +40,10 @@ def add_update_player(name: str = None, puuid: str = None):
                                 "bot_fours": int(df_rank_info["losses"][0]),
                                 "last_updated": datetime.utcnow()}))
         else:
+            name = check_player[1]
+            summoner_id = check_player[2]
+
+            df_rank_info = riotApi.get_rank_info(summoner_id)
             conn.execute(db.rank_info.
                          update().
                          where(db.rank_info.c.puuid == puuid).
@@ -51,61 +54,12 @@ def add_update_player(name: str = None, puuid: str = None):
                                 "top_fours": int(df_rank_info["wins"][0]),
                                 "bot_fours": int(df_rank_info["losses"][0]),
                                 "last_updated": datetime.utcnow()}))
-            
+
     return(name, puuid, summoner_id)
 
-# def crawl_chally():
-#     """
-#     Gets match history 
-#     """
-#     df_chally = riotApi.get_challenger()
-
-#     with db.engine.begin() as conn:
-#         for player in df_chally.iterrows():
-#             name = player[1]["summonerName"]
-#             check_player = conn.execute(db.sa.select(db.players).where(db.players.c.name == name)).fetchone()
-#             print("|", name, "|")
-#             return
-#             flag = False
-#             if(check_player is None):
-#                 name, puuid, summoner_id = riotApi.get_summoner(name, all = True)
-#                 conn.execute(db.players.insert().values({"puuid": puuid, "name": name, "id": summoner_id}))
-#                 flag = True
-#             else:
-#                 puuid = check_player[0]
-#                 summoner_id = check_player[2]
-
-#             # add/update rank info
-#             df_rank_info = player[1]
-
-#             if(flag):
-#                 conn.execute(db.rank_info.
-#                             insert().
-#                             values({"puuid": puuid, 
-#                                     "tier": "CHALLENGER",
-#                                     "rank": df_rank_info["rank"],
-#                                     "lp": df_rank_info["leaguePoints"],
-#                                     "top_fours": df_rank_info["wins"],
-#                                     "bot_fours": df_rank_info["losses"],
-#                                     "last_updated": datetime.utcnow()}))
-#             else:
-#                 conn.execute(db.rank_info.
-#                             update().
-#                             where(db.rank_info.c.puuid == puuid).
-#                             values({"puuid": puuid, 
-#                                     "tier": "CHALLENGER",
-#                                     "rank": df_rank_info["rank"],
-#                                     "lp": df_rank_info["leaguePoints"],
-#                                     "top_fours": df_rank_info["wins"],
-#                                     "bot_fours": df_rank_info["losses"],
-#                                     "last_updated": datetime.utcnow()}))
-                
-#             print(f"Adding Chally: {player[0]} ({round(player[0] / len(df_chally), 2) * 100}%)")
-
-
-def get_full_history_info(name: str = None, puuid: str = None):
+def get_n_history_info(name: str = None, puuid: str = None, s_id: str = None, n: int = 1000):
     """
-    Input: summonerName
+    Input: summonerName, puuid (optional), amount of matches to get (full = 1,000)
 
     Adds/updates player data in SQL.
     
@@ -116,14 +70,30 @@ def get_full_history_info(name: str = None, puuid: str = None):
 
     Output: None
     """
+    if(n > 1000):
+        print("The maximum amout of matches stored is 1,000")
+        return
+
+    if(n < 200):
+        get = n
+    else:
+        get = 200
+
     with db.engine.begin() as conn:
-        name, puuid, summoner_id = add_update_player(name)
+        if(puuid):
+            name, puuid, summoner_id = add_update_player(puuid = puuid)
+        elif(name):
+            name, puuid, summoner_id = add_update_player(name)
+        elif(s_id):
+            name, puuid, summoner_id = add_update_player(s_id = s_id)
+        else:
+            print("Please add identifier")
 
         # get past 1,000 matches (or last 2 yrs)
         id_lst = []
         flag = False
-        while(len(id_lst) < 1000 or flag):
-            new_ids = riotApi.get_match_ids(name, puuid, len(id_lst), 200)
+        while(len(id_lst) < n or flag):
+            new_ids = riotApi.get_match_ids(name, puuid, len(id_lst), get)
 
             if(len(new_ids) == 0):
                 flag = True
@@ -137,50 +107,60 @@ def get_full_history_info(name: str = None, puuid: str = None):
 
         # exit if no new data
         if(len(ids_to_insert) == 0):
-            pass
+            return
 
         # add data
         df_hist, df_info = riotApi.get_match_history_info(ids_to_insert, puuid = puuid)
 
         # check if all players are in players table
-        for row in df_info.iterrows():
-            add_update_player(puuid = row[1]["puuid"])
-            print(f"Adding/Updating Players: {row[0]} ({round(row[0] / len(df_info), 2) * 100}%)")
+        print(f"Adding/Updating Players")
+        with alive_bar(len(df_info)) as bar:
+            for row in df_info.iterrows():
+                add_update_player(puuid = row[1]["puuid"])
+                bar()
 
-        for val in df_hist.iterrows():
-            conn.execute(db.match_history.insert().values(val[1]))
-            print(f"Adding History: {val[0]} ({round(val[0] / len(df_hist), 2) * 100}%)")
+        print(f"Adding History")
+        with alive_bar(len(df_hist)) as bar:
+            for val in df_hist.iterrows():
+                conn.execute(db.match_history.insert().values(val[1]))
+                bar()
 
-        for val in df_info.iterrows():
-            conn.execute(db.match_info.insert().values(val[1]))
-            print(f"Adding Info: {val[0]} ({round(val[0] / len(df_info), 2) * 100}%)")
-        
-# def get_full_match_info(name: str):
-#     with db.engine.begin() as conn:
-#         # get matche ids
-#         match_ids = conn.execute(db.sa.select(db.match_history.c.match_id))
-#         match_ids = set(row[0] for row in match_ids)
+        print(f"Adding Info")
+        with alive_bar(len(df_info)) as bar:
+            for val in df_info.iterrows():
+                conn.execute(db.match_info.insert().values(val[1]))
+                bar()
 
-#         # check for already existing match_ids
-#         existing_ids = conn.execute(db.sa.select(db.my_match_info.c.match_id))
-#         existing_ids = set(row[0] for row in existing_ids)
+def crawl_chally(n: int = 1):
+    """
+    Gets n matchs for each current Challenger ranked players
+    """
+    df_chally = riotApi.get_challenger()
 
-#         new_ids = match_ids - existing_ids
+    for player in df_chally.iterrows():
+        print("-----------------------------------------------------------------------------------")
+        print(f"Player {player[0] + 1} / {len(df_chally)}: {player[1]['summonerName']}")
+        get_n_history_info(s_id = player[1]["summonerId"], n = n)
+    print("-----------------------------------------------------------------------------------")
 
-#         # get info
-#         df_info = riotApi.get_match_info(name, new_ids)
-
-#         # add new info
-#         for val in df_info.iterrows():
-#             conn.execute(db.my_match_info.insert().values(val[1]))
-
-if __name__ == "__main__":
+def update_me():
     print("===================================================================================")
     start = datetime.now()
-    get_full_history_info("Wanderr")
+    get_n_history_info("Wanderr")
     print("===================================================================================")
     print(f"Began: {start}\nEnded: {datetime.now()}")
     print("===================================================================================")
+
+def get_chally(n: int = 1):
+    print("===================================================================================")
+    start = datetime.now()
+    crawl_chally(n)
+    print("===================================================================================")
+    print(f"Began: {start}\nEnded: {datetime.now()}")
+    print("===================================================================================")   
+
+if __name__ == "__main__":
+    get_chally(20)
     
 
 # TODO: crawling to get match data | get n matchs from specificed players history (getting full 1,000 takes a while)
