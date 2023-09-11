@@ -35,6 +35,8 @@ def add_update_player(name: str = None, puuid: str = None, s_id: str = None):
                                 "bot_fours": int(df_rank_info["losses"][0]),
                                 "last_updated": datetime.utcnow()}))
         else:
+            conn.execute(db.players.update().where(db.players.c.puuid == puuid).values({"puuid": puuid, "name": name, "id": summoner_id}))
+
             df_rank_info = riotApi.get_rank_info(summoner_id)
             conn.execute(db.rank_info.
                          update().
@@ -156,7 +158,7 @@ def get_chally(n: int = 1):
 
 if __name__ == "__main__":
     # get_chally(20)
-    update_player("Helop")
+    add_update_player("Helop")
     
 
 # TODO: crawling to get match data | get n matchs from specificed players history (getting full 1,000 takes a while)
