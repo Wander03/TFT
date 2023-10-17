@@ -11,12 +11,17 @@ from alive_progress import alive_bar
 load_dotenv()
 api_key = os.environ.get("RIOT_KEY")
 
+
 @sleep_and_retry
-@limits(calls=100, period=130)
+@limits(calls=100, period=125)
 def call_api(url):
     response = requests.get(url)
-
-    if response.status_code != 200:
+    
+    if response.status_code == 429:
+        retry_after = int(response.headers['Retry-After'])
+        time.sleep(retry_after)
+        return call_api(url)
+    elif response.status_code != 200:
         print('API response: {}'.format(response.status_code))
 
     return response
@@ -79,6 +84,7 @@ def get_rank_info(summonder_id: str):
 
 def get_queue_from_id(id):
     queue_dict = {
+        1130: "HYPER ROLL",
         1090: "NORMAL",
         1100: "RANKED",
         1110: "TUTORIAL",
@@ -189,8 +195,8 @@ def get_match_history_info(match_ids: list, name: str = None, puuid: str = None)
     df_match_info['augment_2'] = df_match_info['augments'].apply(lambda x: x[1] if len(x) > 1 else None)
     df_match_info['augment_3'] = df_match_info['augments'].apply(lambda x: x[2] if len(x) > 2 else None)
 
-    df_match_info['traits'] = df_match_info['traits'].apply(lambda x: x[0] if len(x) > 0 else None)
-    df_match_info['units'] = df_match_info['units'].apply(lambda x: x[0] if len(x) > 0 else None)
+    df_match_info['traits'] = df_match_info['traits'].apply(lambda x: x if len(x) > 0 else None)
+    df_match_info['units'] = df_match_info['units'].apply(lambda x: x if len(x) > 0 else None)
 
     return(df_match_history[["match_id", "game_datetime", "game_length", "tft_set_number", "tft_set_core_name", "tft_game_type", "game_version"]], 
            df_match_info[["match_id", "puuid", "placement", "level", "last_round", "gold_left", "players_eliminated", 
@@ -206,6 +212,20 @@ def get_challenger():
                 )
 
     response = response.json()["entries"]
+
+    entries = pd.json_normalize(response)
+
+    return(entries)
+
+def get_rank(tier: str, rank: str, page: int = 1):
+    """
+    Output: Data Frame of <tier> <rank> players from page <page>
+    """
+    response = call_api(
+                f"https://na1.api.riotgames.com/tft/league/v1/entries/{tier}/{rank}?queue=RANKED_TFT&page={page}&api_key={api_key}"
+                )
+    
+    response = response.json()
 
     entries = pd.json_normalize(response)
 

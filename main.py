@@ -136,7 +136,21 @@ def crawl_chally(n: int = 1):
 
     for player in df_chally.iterrows():
         print("-----------------------------------------------------------------------------------")
-        print(f"Player {player[0] + 1}/{len(df_chally)}: {player[1]['summonerName']}")
+        print(f"CHALLENGER Player {player[0] + 1}/{len(df_chally)}: {player[1]['summonerName']}")
+        get_n_history_info(s_id = player[1]["summonerId"], n = n)
+    print("-----------------------------------------------------------------------------------")
+
+def crawl_rank(tier: str, rank: str, page: int = 1, n: int = 1):
+    """
+    Gets n matchs for each current <tier> <rank> ranked players from page <page>
+
+    Max n is 205 (I think)
+    """
+    df_rank = riotApi.get_rank(tier, rank, page)
+
+    for player in df_rank.iterrows():
+        print("-----------------------------------------------------------------------------------")
+        print(f"{tier} {rank} Player {player[0] + 1}/{len(df_rank)}: {player[1]['summonerName']}")
         get_n_history_info(s_id = player[1]["summonerId"], n = n)
     print("-----------------------------------------------------------------------------------")
 
@@ -154,11 +168,24 @@ def get_chally(n: int = 1):
     crawl_chally(n)
     print("===================================================================================")
     print(f"Began: {start}\nEnded: {datetime.now()}")
+    print("===================================================================================")
+
+def get_rank(tier: str, rank: str, page: int = 1, n: int = 1):
+    print("===================================================================================")
+    start = datetime.now()
+    crawl_rank(tier, rank, page, n)
+    print("===================================================================================")
+    print(f"Began: {start}\nEnded: {datetime.now()}")
     print("===================================================================================")   
 
 if __name__ == "__main__":
-    # get_chally(20)
-    add_update_player("Helop")
+    for r in ["PLATINUM", "GOLD", "SILVER", "BRONZE", "IRON"]:
+        for t in ["III"]:
+            get_rank(r, t, 1, 5)
+
+    get_chally(5)
+
+    # update_player("Helop")
     
 
-# TODO: crawling to get match data | get n matchs from specificed players history (getting full 1,000 takes a while)
+# TODO: add a table to store my lp hisotry each time I update; if i can get the api key to not expire set to run after each game somehow?
