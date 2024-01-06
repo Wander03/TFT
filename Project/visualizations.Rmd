@@ -1,0 +1,104 @@
+---
+title: "Untitled"
+author: "Andrew Kerr"
+date: "2023-12-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+$\widehat{is\_challenger} = placement + match\_avg\_board\_cost + avg\_unit\_level:match\_avg\_board\_cost + (1 | match\_id)$
+
+Level 1
+  
+$\small{\widehat{challenger} = \beta_{0j} + \beta_{1}\text{(placement)}_{ij} + \beta_{2j}\text{(average unit level)}_{ij} + \epsilon_{ij}}$
+     
+Level 2
+  
+$\small{\beta_{0j} = \beta_{00} + \beta_{01}\text{(match average board cost)}_j + u_{0j}}$
+
+$\small{\beta_{2j} = \beta_{20} + \beta_{21}\text{(match average board cost)}_j}$
+
+
+```{r}
+library(tidyverse)
+rank_dist <- data.frame(
+  rank = c('Challenger', 'GrandMaster', 'Master', 
+    'Diamond I', 'Diamond II', 'Diamond III', 'Diamond IV',
+    'Platinum I', 'Platinum II', 'Platinum III', 'Platinum IV',
+    'Gold I', 'Gold II', 'Gold III', 'Gold IV',
+    'Silver I', 'Silver II', 'Silver III', 'Silver IV',
+    'Bronze I', 'Bronze II', 'Bronze III', 'Bronze IV',
+    'Iron I', 'Iron II', 'Iron III', 'Iron IV'),
+  prop = c(.00026, .00056, .0051, 
+    .0011, .0034, .0071, .02, 
+    .007, .017, .028, .062, 
+    .026, .054, .078, .12, 
+    .065, .097, .098, .098, 
+    .054, .052, .038, .026, 
+    .014, .012, .0041, .00019)*100,
+  big_rank = c('Challenger', 'GrandMaster', 'Master', 
+    'Diamond', 'Diamond', 'Diamond', 'Diamond',
+    'Platinum', 'Platinum', 'Platinum', 'Platinum',
+    'Gold', 'Gold', 'Gold','Gold',
+    'Silver', 'Silver', 'Silver','Silver',
+    'Bronze', 'Bronze', 'Bronze','Bronze',
+    'Iron', 'Iron', 'Iron', 'Iron')
+  )
+
+rank_dist$rank <- factor(rank_dist$rank, levels = rev(rank_dist$rank))
+
+rank_dist %>%
+  ggplot()+
+    geom_col(aes(x=rank, y=prop, fill=big_rank)) +
+  theme_classic() +
+  theme(
+    plot.title = element_text(size = 20),  # Adjust title size
+    axis.title.x = element_text(size = 16),  # Adjust x-axis label size
+    axis.text.x = element_text(size = 12, angle = 45, hjust = 1),  # Adjust x-axis tick label size and rotation
+    legend.position = "none"  # Hide the legend
+  ) + 
+  scale_fill_manual(values = c(
+    "Challenger" = "red2",
+    "GrandMaster" = "darkred",
+    "Master" = "purple2",
+    "Diamond" = "skyblue2",
+    "Platinum" = "seagreen3",
+    "Gold" = "gold2",
+    "Silver" = "grey",
+    "Bronze" = "tomato2",
+    "Iron" = "darkgrey"
+  )) +
+  labs(x='Rank',y='Percent of Player Base', title='Distribution of Ranked Players') +   
+  scale_y_continuous(labels = scales::percent_format(scale = 1))
+```
+
+```{r}
+rank_dist2 <- data.frame(
+  rank = c('Challenger', 'GrandMaster', 'Master'),
+  prop = c(.00026, .00056, .0051)
+  )
+
+rank_dist2$rank <- factor(rank_dist2$rank, levels = rev(rank_dist2$rank))
+
+rank_dist2 %>%
+  ggplot()+
+    geom_col(aes(x=rank, y=prop, fill=rank)) +
+  theme_classic() +
+  theme(
+    plot.title = element_text(size = 20),  # Adjust title size
+    axis.title.x = element_text(size = 16),  # Adjust x-axis label size
+    # axis.text.x = element_text(size = 12, angle = 45, hjust = 1),  # Adjust x-axis tick label size and rotation
+    legend.position = "none"  # Hide the legend
+  )+ 
+  scale_fill_manual(values = c(
+    "Challenger" = "red2",
+    "GrandMaster" = "darkred",
+    "Master" = "purple4"
+  )) +
+  labs(x='',y='') +   
+  scale_y_continuous(labels = scales::percent_format(scale = 1))
+```
+

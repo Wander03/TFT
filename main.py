@@ -179,11 +179,11 @@ def get_rank(tier: str, rank: str, page: int = 1, n: int = 1):
     print("===================================================================================")   
 
 if __name__ == "__main__":
-    for r in ["PLATINUM", "GOLD", "SILVER", "BRONZE", "IRON"]:
-        for t in ["III"]:
-            get_rank(r, t, 1, 5)
+    # for r in ["DIAMOND", "PLATINUM", "GOLD", "SILVER", "BRONZE", "IRON"]:
+    #     for t in ["III"]:
+    #         get_rank(r, t, 1, 5)
 
-    get_chally(5)
+    get_chally(10)
 
     # update_player("Helop")
     
