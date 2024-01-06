@@ -1,0 +1,264 @@
+---
+title: "Project 1 - Proposal and Data Assembly Take 2"
+author: "Andrew Kerr"
+date: "2023-10-15"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(eval = TRUE)
+options(digits=4)
+```
+
+```{r, message=FALSE, include=FALSE, warning=FALSE}
+library(tidyverse)
+library(jsonlite)
+library(RPostgres)
+library(RPostgreSQL)
+load(url("http://www.rossmanchance.com/iscam3/ISCAM.RData"))
+```
+
+```{r, include=FALSE}
+# Replace these values with your Supabase database details
+host <- "db.bnnpxoerfnicvlkamcdv.supabase.co"
+dbname <- "postgres"
+user <- "postgres"
+password <- "0anadhrVeMVHTXxq"
+
+# Establish a connection to the Supabase database
+con <- dbConnect(RPostgres::Postgres(), 
+                 host = host, 
+                 dbname = dbname, 
+                 user = user, 
+                 password = password)
+
+# match_history <- dbGetQuery(con, "SELECT * FROM match_history")
+# match_info <- dbGetQuery(con, "SELECT * FROM match_info")
+# players <- dbGetQuery(con, "SELECT * FROM players")
+# rank_info <- dbGetQuery(con, "SELECT * FROM rank_info")
+
+q = "
+select
+  ri.tier = 'CHALLENGER' as is_challenger,
+  mh.match_id,
+  p.name,
+  mh.game_length,
+  mh.tft_game_type,
+  mi.placement,
+  mi.level,
+  mi.last_round,
+  mi.gold_left,
+  mi.augment_1,
+  mi.augment_2,
+  mi.augment_3,
+  mi.traits,
+  mi.units
+from
+  match_history as mh
+  join match_info as mi on mh.match_id = mi.match_id
+  join rank_info as ri on mi.puuid = ri.puuid
+  join players as p on ri.puuid = p.puuid
+where
+  mh.tft_game_type = 'RANKED'
+  and mh.tft_set_core_name = 'TFTSet9_2'
+  and ri.tier in ('CHALLENGER', 'GRANDMASTER', 'MASTER')
+"
+df_TFT = dbGetQuery(con, q)
+
+
+# Close connection to Supabase database
+dbDisconnect(con)
+```
+
+# Data Collection and Cleaning
+
+Using my program, I provide the tier I desire, and my program 
+acquires 205 randomly selected players from the tier and adds their 5 most 
+recently played matches to my database. For each match I collect information
+on all 8 players and how they performed in the match. For the highest tier 
+(Challenger), I was able to collect the 5 most recent matches of all players in 
+this tier (n = 250).
+
+The variables I have decided to include are:
+
+  + placement: a measure of how well a player performed in a match compared to 
+  other players in the match
+  + level: a measure of how well strong a player was in a match
+  + last_round: what round a player is eliminated from a match
+  + gold_left: amount of gold a player had when the were eliminated from a match
+  + augment_1-3: game modifier selected by a player during the match
+  + units: units a player was using when they were eliminated
+  + game_length: how long (in seconds) a match lasted
+  + is_challenger: True if the player is Challenger tier, False if not
+
+## Augments
+
+To start I need to explain a bit more about the augment variables. All
+players select 3 augments throughout each match, and there are two types of 
+augments: normal augments and legend augments. Legend augments are tailored 
+towards different play styles, and are chosen by a player prior to starting a 
+match. Riot's API provides us the name of each augment a player chooses, unless 
+it was a legend augment, in which case the API returns NA. However, there is a 
+small chance that no augments are offered in a given match, and in this case the
+API returns NA for all augments for all players in the match.
+
+A new feature I have decided to create is the number of legend augments a player
+chose during their match. Since I can not distinguish legend augments from a no 
+augment match, I have dropped matches where all players have NA for all three
+augments (this signifies that either everyone chose a legend augment 3 times, or
+no augments were offered that match, the former being more unlikely than the 
+latter; -8 observations).
+
+```{r}
+remove_matches <- df_TFT %>%
+  group_by(match_id) %>%
+  filter(is.na(augment_1), is.na(augment_2), is.na(augment_3)) %>%
+  count() %>%
+  filter(n == 8) %>%
+  select(match_id)
+
+# remove_matches %>% nrow()
+
+df_TFT_clean <- df_TFT %>%
+  filter(!(match_id %in% remove_matches)) %>%
+  group_by(match_id, name) %>%
+  mutate(n_legend = sum(
+    if_else(last_round >= 5, is.na(augment_1), 0)
+    + if_else(last_round >= 13, is.na(augment_2), 0)
+    + if_else(last_round >= 20, is.na(augment_3), 0)
+    ))
+```
+
+## Units
+
+Each unit a player has on their board has a cost of 1, 2, 3, 4, or 5 and can be 
+level 1, 2, or 3. If you have 3 of the same level 1 units, it becomes a level 2,
+and if you have 3 of the same level 2 units it becomes level 3 (e.g. the cost
+of a level 2, 3 cost, unit is 6 gold). Two ways to measure how strong a players
+board is is by looking at average unit level and total board cost. The following 
+aggregates the units feature (currently a json) to be the average unit level and
+total board cost the player ended the match with.
+
+Additionally, since there is great variability in amount of resources (gold, 
+free units, etc.) given to players from match to match, I have created features 
+for average unit level and average board cost of all players in a match (level 2 
+features). 
+
+```{r}
+df_units <- lapply(df_TFT_clean$units, fromJSON)
+
+avg_units <- sapply(df_units, function(units) {
+  if (length(units) > 0) {
+    return(mean(units$tier))
+  } 
+  return(0)
+})
+
+board_costs <- sapply(df_units, function(units) {
+  if (length(units) > 0) {
+    cost <- units %>%
+      filter(character_id != 'TFT9_HeimerdingerTurret') %>%
+      # The rarity (cost) is off from the API results...
+      mutate(costs = ifelse(rarity < 3, rarity + 1, ifelse(rarity == 6, rarity - 1, rarity)) * tier)
+    return(sum(cost$costs))
+  } 
+  return(0)
+})
+
+df_TFT_clean$avg_unit_level <- avg_units # level 1
+df_TFT_clean$board_cost <- board_costs # level 1
+df_TFT_clean <- df_TFT_clean %>% 
+  group_by(match_id) %>%
+  mutate(match_avg_unit_level = mean(avg_unit_level),
+         match_avg_board_cost = mean(board_cost)) # 2 level 2 variables
+
+df_TFT_clean <- df_TFT_clean %>% select(-units)
+```
+
+## Independence
+
+Since, within each match, knowing the results of one player can affect the 
+probability of seeing certain results of another player (e.g. placement), I
+have decided to randomly sample from my random sample. I will only keep 3 random
+players per match.
+
+```{r}
+set.seed(43)
+
+# select 2 Challenger players and 2 Non-Challenger players from each match
+# if 2 of one target group does not exist in a match, remove it
+df_TFT_clean_sample <- df_TFT_clean %>%
+  group_by(match_id) %>%
+  slice_sample(n = 3, replace = FALSE) %>%
+  group_by(match_id)
+  
+df_TFT_clean_sample %>%
+  group_by(is_challenger) %>%
+  select(is_challenger, match_id) %>%
+  count()
+
+nrow(df_TFT_clean_sample)
+```
+
+```{r}
+df_TFT_clean_sample <- df_TFT_clean_sample %>%
+  select(-name, -tft_game_type, -traits, -augment_1, -augment_2, -augment_3) %>%
+  mutate(
+    game_length = as.integer(game_length),
+    level = as_factor(level),
+    placement = as_factor(placement),
+    n_legend = as_factor(n_legend),
+    match_id = as_factor(match_id),
+    is_challenger = as_factor(is_challenger)
+  )
+
+df_TFT_clean_sample$is_challenger <- factor(df_TFT_clean_sample$is_challenger, levels=c(TRUE, FALSE), labels=c('Challenger', 'Master/Grandmaster'))
+df_TFT_clean_sample$level <- factor(df_TFT_clean_sample$level, levels=c('1', '2', '3', '4', '5', '6', '7', '8', '9', '10'))
+df_TFT_clean_sample$placement <- factor(df_TFT_clean_sample$placement, levels=c('1', '2', '3', '4', '5', '6', '7', '8'))
+df_TFT_clean_sample$n_legend <- factor(df_TFT_clean_sample$n_legend, levels=c('0', '1', '2', '3'))
+```
+
+# Exploration
+
+```{r}
+plot(df_TFT_clean_sample[c(1, 3, 4, 5, 6)])
+plot(df_TFT_clean_sample[c(1, 7, 8, 9, 10, 11, 12)])
+plot(df_TFT_clean_sample[c(1, 3, 4, 6, 7, 8, 9, 11, 12)])
+plot(df_TFT_clean_sample[c(1, 4, 5, 6, 7, 8, 9, 11, 12)])
+```
+
+```{r}
+df_TFT_clean_sample %>%
+  ggplot() +
+    geom_bar(aes(x=is_challenger, fill=level), position='fill')
+
+df_TFT_clean_sample %>%
+  ggplot() +
+    geom_bar(aes(x=is_challenger, fill=placement), position='fill')
+
+df_TFT_clean_sample %>%
+  ggplot() +
+    geom_boxplot(aes(x=is_challenger, y=last_round))
+
+df_TFT_clean_sample %>%
+  ggplot() +
+    geom_boxplot(aes(x=is_challenger, y=avg_unit_level))
+
+df_TFT_clean_sample %>%
+  ggplot() +
+    geom_boxplot(aes(x=is_challenger, y=gold_left))
+
+df_TFT_clean_sample %>%
+  ggplot() +
+    geom_boxplot(aes(x=is_challenger, y=game_length))
+
+df_TFT_clean_sample %>%
+  ggplot() +
+    geom_bar(aes(x=is_challenger, fill=n_legend), position='fill')
+```
+
+```{r}
+write.csv(df_TFT_clean_sample, "TFT_data.csv", row.names = FALSE)
+```

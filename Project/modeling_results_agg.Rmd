@@ -1,0 +1,552 @@
+---
+title: "Project 1 - Modeling Results"
+author: "Andrew Kerr"
+date: '2023-11-18'
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE, include=FALSE, warning=FALSE}
+library(tidyverse)
+library(lme4)
+load(url("http://www.rossmanchance.com/iscam3/ISCAM.RData"))
+```
+
+```{r}
+df_TFT <- read_csv(here::here('Project', 'TFT_data.csv'))
+head(df_TFT, 5)
+```
+
+# Data Manipulation
+
+```{r}
+# Reduce amount of levels by focusing on specific time period
+df_TFT %>%
+  ggplot() +
+  geom_point(aes(y=match_id, x=game_length)) +
+  theme_classic()
+
+# Games between 35 and 37 minutes long
+df_TFT %>%
+  filter(game_length > 2100 & game_length < 2220) %>%
+  ggplot() +
+  geom_point(aes(y=match_id, x=game_length)) +
+  theme_classic()
+
+df_TFT <- df_TFT %>%
+  filter(game_length > 2100 & game_length < 2220)
+
+# Set the correct columns types
+df_TFT$is_challenger <- as.factor(if_else((df_TFT$is_challenger == "Challenger"), TRUE, FALSE))
+df_TFT$match_id <- factor(df_TFT$match_id)
+# df_TFT$group <- factor(df_TFT$group, levels=c('1', '2', '3'))
+df_TFT$level <- factor(df_TFT$level, levels=c('1', '2', '3', '4', '5', '6', '7', '8', '9', '10'))
+df_TFT$placement <- factor(df_TFT$placement, levels=c('1', '2', '3', '4', '5', '6', '7', '8'))
+df_TFT$n_legend <- factor(df_TFT$n_legend, levels=c('0', '1', '2', '3'))
+
+# All quantitative variables are grand-mean centered
+centered_TFT <- df_TFT %>%
+  select(-is_challenger, -match_id, -level, -placement, -n_legend) %>%
+  mutate_all(~ . - mean(., na.rm = TRUE))
+
+df_TFT <- df_TFT %>%
+  select(is_challenger, match_id, level, placement, n_legend) %>%
+  bind_cols(centered_TFT)
+```
+
+# Exploring the variability in the response variable across the Level-2 units
+
+```{r}
+hist_data <- df_TFT %>%
+  group_by(match_id) %>%
+  summarize(count_ones = sum(as.logical(is_challenger)))
+
+ggplot(hist_data, aes(x = count_ones)) +
+  geom_histogram(binwidth = 1, fill = "peru", alpha = 0.75) +
+  labs(title = "Count of 1's Across Matches", x = "Count of 1's", y = "Frequency") + 
+  theme_classic()
+```
+
+  * The histogram reveals a right skewed distribution of the amount of Challenger
+  players among the different matches. This makes sense since the rank of 
+  Challenger is only given to the top 250 players.  
+
+```{r}
+df_TFT %>%
+  ggplot() +
+    geom_bar(aes(fill=is_challenger, x=placement), position='fill') +
+  scale_fill_manual(values = c('peru', 'skyblue')) +
+  theme_classic() +
+  labs(x = 'Placement', y = 'Proportion', fill = 'Challenger')
+```
+
+```{r}
+plot(df_TFT[c(1, 11, 12)])
+```
+
+
+```{r}
+# model1 <- glm(is_challenger ~ match_id, family = 'binomial', data=df_TFT)
+# summary(model1)
+chisq.test(df_TFT$is_challenger, df_TFT$match_id)
+```
+
+  * With a p-value of approx. 0 from the chi-square test, we have
+  significant evidence to suggest that there is an association between whether a 
+  player is ranked Challenger and the match.
+  
+# Intercepts Only Model
+
+```{r}
+model2 <- glmer(is_challenger ~ (1 | match_id), family = "binomial", data = df_TFT)
+summary(model2)
+performance::icc(model2)
+```
+
+  * -0.33451 --> $\frac{e^{-0.33451}}{1 + e^{-0.33451}} = 0.4171437$: 
+  For an average match, the probability that a player is ranked Challenger
+  is 0.42.
+  * 1.478: The variance in the log-odds that a player is ranked Challenger in 
+  an average match
+  * 1.216: The standard deviation in the log-odds that a player is ranked 
+  Challenger in an average match
+  * ICC = $\frac{\tau^2}{\tau^2 + \frac{\pi^2}{3}} = \frac{1.478}{1.478 + \frac{\pi^2}{3}} = 0.310$: 
+  The grouping variable, match_id, accounts for 31% of the variability in the
+  predicted log-odds of a player being ranked Challenger.
+    * This value of ICC seems moderately substantial to me, meaning that there 
+    is a meaningful level of similarity within matches indicating that 
+    players within the same match tend to have more similar outcomes than 
+    players in different matches. Since Challenger players and Non-Challenger
+    players can be in the same matches, and I expect these types of players to 
+    have different play styles reflected in their match results, it makes sense 
+    that there would be more similarity between similar types of players than 
+    between matches.
+  * log-likelihood: -1071.9
+  * deviance: 2143.8
+  * AIC: 2147.8
+  
+```{r}
+plot(ggeffects::ggpredict(model2, terms=c("match_id [sample=9]"), type="re"), ci = F)
+```
+
+  
+# Adding Level 1 Variables
+
+```{r}
+model3 <- glmer(as.factor(is_challenger) ~ placement + level + last_round + gold_left + 
+                  n_legend + avg_unit_level + board_cost + (1 | match_id), 
+                family = "binomial", 
+                data = df_TFT)
+summary(model3, correlation=F)
+anova(model2, model3)
+performance::icc(model3)
+```
+
+  * Based on the likelihood ratio test, with a small p-value of $0.004614$,
+  the model with all level 1 variables included is a better fit (demonstrates a 
+  statistically significant improvement in predicting whether or not a player
+  is ranked Challenger) compared to the null model.
+    * The $\chi^2 = 37.423$ is found by calculating 
+    $−2 * (\text{Log-likelihood of simpler model}- \text{Log-likelihood of more complex model}) = -2 * (-1071.9 - (-1053.2))$
+    The $df = 18$ is found by $\text{df of more complex model} - \text{df of simpler model} = 19 - 1$
+  * AIC = 2146.3
+    * Compared to the null model, there is a very slight decrease in the AIC value 
+    indicating we should select model3, but are also fine with model2
+  * ICC = 0.334
+    * This has increased from model2, indicating that match id has a stronger
+    influence on the log-odds of a player being ranked Challenger.
+  * The level 2 variance increased from 1.949 to 2.407. This tells me that more
+  the association between matches is not the same as that within matches.
+
+  * Unsure how to "Calculate a “proportion of variation explained” for each 
+  variable and interpret the results in context (be clear variation in what)."
+    * Will ask during office hours!
+
+```{r}
+plot(effects::allEffects(model3))
+plot(ggeffects::ggpredict(model3, terms=c("board_cost", "match_id [sample=9]"), type="re"), ci = F)
+```
+
+# Step-wise repmoval of insignificant predictors
+
+```{r}
+model3b <- glmer(is_challenger ~ placement + last_round + gold_left + 
+                  n_legend + avg_unit_level + board_cost + (1 | match_id), 
+                family = "binomial", 
+                data = df_TFT)
+
+model3c <- glmer(is_challenger ~ placement + gold_left + 
+                  n_legend + avg_unit_level + board_cost + (1 | match_id), 
+                family = "binomial", 
+                data = df_TFT)
+
+model3d <- glmer(is_challenger ~ placement + gold_left + avg_unit_level + board_cost + (1 | match_id), 
+                family = "binomial", 
+                data = df_TFT)
+
+model3e <- glmer(is_challenger ~ placement + gold_left + avg_unit_level + (1 | match_id), 
+                family = "binomial", 
+                data = df_TFT)
+
+model3f <- glmer(is_challenger ~ placement + gold_left + (1 | match_id), 
+                family = "binomial", 
+                data = df_TFT)
+
+model3g <- glmer(is_challenger ~ placement + avg_unit_level + (1 | match_id), 
+                family = "binomial", 
+                data = df_TFT)
+
+model3h <- glmer(is_challenger ~ placement + (1 | match_id), 
+                family = "binomial", 
+                data = df_TFT)
+
+model3i <- glmer(is_challenger ~ level + (1 | match_id), 
+                family = "binomial", 
+                data = df_TFT)
+
+summary(model3b, correlation=F)
+summary(model3c, correlation=F)
+summary(model3d, correlation=F)
+summary(model3e, correlation=F)
+summary(model3f, correlation=F)
+summary(model3g, correlation=F)
+summary(model3h, correlation=F)
+summary(model3i, correlation=F)
+
+anova(model3, model3b)
+anova(model3b, model3c)
+anova(model3c, model3d)
+anova(model3d, model3e)
+anova(model3e, model3f)
+anova(model3e, model3g)
+anova(model3f, model3g)
+anova(model3h, model3g)
+anova(model3h, model3f)
+anova(model3f, model2)
+```
+
+```{r}
+texreg::screenreg(list(model2, model3, model3b, model3e, model3f, model3g), digits = 3, single.row = TRUE, stars = 0,
+                  custom.model.names = c("null model", "all level 1", "modelb", "modele", "modelf", "modelg"), custom.note = "")
+```
+
+```{r}
+# final level 1 model
+level.1.model <- glmer(is_challenger ~ placement + (1 | match_id), 
+                family = "binomial", 
+                data = df_TFT)
+summary(level.1.model, corr=F)
+```
+
+# Adding Level 2 Variables
+
+```{r}
+model4 <- glmer(is_challenger ~ placement
+                + match_avg_unit_level + match_avg_board_cost 
+                + (1 | match_id), 
+                family = "binomial", 
+                data = df_TFT)
+summary(model4, correlation=F)
+anova(level.1.model, model4)
+performance::icc(model4)
+```
+
+  * Based on the likelihood ratio test, with a small p-value of 0.003537,
+  the model with all level 2 variables included is a better fit (demonstrates a 
+  statistically significant improvement in predicting whether or not a player
+  is ranked Challenger) compared to the chosen level 1 variable only model.
+    * The $\chi^2 = 11.289$ is found by calculating 
+    $−2 * (\text{Log-likelihood of simpler model}- \text{Log-likelihood of more complex model}) = -2 * (-1055.5 - (-1049.9))$
+    The $df = 2$ is found by $\text{df of more complex model} - \text{df of simpler model} = 11 - 9$
+  * AIC = 2123.7
+    * Compared to the final level 1 model, there is a slight increase in the AIC 
+    value in indicating model4 we should consider sticking with the prior model
+  * % level 1 variance explained: we assume constant probability within groups...
+  * % level 2 variance explained: $\frac{1.627 - 1.64}{1.627} = -0.007990166$
+
+# Step-wise repmoval of insignificant predictors
+
+```{r}
+model4b <- glmer(is_challenger ~ placement
+                + match_avg_board_cost 
+                + (1 | match_id), 
+                family = "binomial", 
+                data = df_TFT)
+summary(model4b, correlation=F)
+
+model4c <- glmer(is_challenger ~ placement
+                + match_avg_unit_level 
+                + (1 | match_id), 
+                family = "binomial", 
+                data = df_TFT)
+summary(model4c, correlation=F)
+```
+
+```{r}
+texreg::screenreg(list(level.1.model, model4, model4b), digits = 3, single.row = TRUE, stars = 0,
+                  custom.model.names = c("only level 1 model", "all level 2 model", "model4b"), custom.note = "")
+anova(model4, model4b)
+anova(model4, model4c)
+```
+
+```{r}
+# final level 1 & 2 model
+level.1.2.model <- glmer(is_challenger ~ placement 
+                         + match_avg_board_cost 
+                         + (1 | match_id), 
+                         family = "binomial", 
+                         data = df_TFT)
+summary(level.1.2.model, corr=F)
+```
+
+# Random Slopes for level 1
+
+```{r}
+rand.slopes.model <- glmer(as.factor(is_challenger) ~ placement 
+                         + match_avg_board_cost 
+                         + (1 + avg_unit_level | match_id), 
+                         family = "binomial", 
+                         data = df_TFT)
+summary(rand.slopes.model, corr=F)
+anova(level.1.2.model, rand.slopes.model)
+```
+
+```{r}
+# rand_slopes <- ranef(rand.slopes.model)$match_id$avg_unit_level
+# plot_data <- data.frame(Group = levels(df_TFT$match_id), RandomSlope = rand_slopes)
+# ggplot(plot_data, aes(x = Group, y = RandomSlope)) +
+#   geom_point(position = position_jitter(width = 0.2, height = 0)) +
+#   labs(title = "Variability in Random Slopes",
+#        x = "Match Id",
+#        y = "Random Slope") +
+#   theme_classic()
+```
+
+```{r}
+plot(ggeffects::ggpredict(rand.slopes.model, terms=c("avg_unit_level", "match_id [sample=9]"), type="re"), ci = F)
+```
+
+
+  * There does not appear to be a significant amount of match to match variation 
+  in the slopes (only 0.008776). This is supported by the large p-value from the 
+  chi-square test (0.9689). Therefore I will not add this random slope to my
+  model.
+
+# Adding Cross-level Interaction
+
+```{r}
+cross.interaction <- glmer(as.factor(is_challenger) ~ placement 
+                           + match_avg_board_cost 
+                           + avg_unit_level:match_avg_board_cost
+                           + (1 | match_id), 
+                           family = "binomial", 
+                           data = df_TFT)
+summary(cross.interaction, corr=F)
+performance::icc(cross.interaction)
+anova(cross.interaction, rand.slopes.model, level.1.2.model)
+```
+
+whe the match avg board cost is high there is a greater delcine in liklelihood og chally as unit level increases
+
+if you are in a match with a high avg baord cost, getting a higher avg unit level lowers your prob of being challenger
+
+```{r}
+plot(effects::allEffects(cross.interaction))
+```
+
+
+  * When average unit level is at its mean, each additional increase in 1 unit 
+  of match average board cost decreases the predicted change in the log-odds of
+  the player being ranked Challenger by and additional 0.128 units.
+  * This model is not significantly better than the model with a random slope
+  for average unit level, however it is significantly better than the current 
+  best model at an $\alpha$ of 0.01.
+
+# Discussion
+
+
+
+```{r}
+final.model <- glmer(is_challenger ~ placement + match_avg_board_cost + avg_unit_level*match_avg_board_cost + (1 | match_id), 
+                     family = "binomial", 
+                     data = df_TFT)
+summary(final.model, corr=F)
+performance::icc(final.model)
+```
+
+```{r}
+plot(ggeffects::ggpredict(final.model, terms=c("match_avg_board_cost ", "match_id [sample=9]"), type="re"), ci = F) +
+  ggtitle("") +
+  xlab('Match Average Board Cost') +
+  ylab('Probability Challenger') +
+  theme_classic()
+
+plot(ggeffects::ggpredict(final.model, terms=c("avg_unit_level", "match_id [sample=9]"), type="re"), ci = F) +
+  ggtitle("") +
+  xlab('Average Unit Level') +
+  ylab('Probability Challenger') +
+  theme_classic()
+```
+
+```{r}
+performance::binned_residuals(final.model) %>% plot() + theme_classic() +labs(x = 'Estimated Probability of Challenger')
+```
+
+```{r}
+coefficients <- coef(final.model)
+standard_errors <- summary(final.model)$coefficients[, "Std. Error"]
+
+# Calculate confidence intervals
+confidence_intervals <- cbind(
+  coefficients$match_id[1] - 1.96 * standard_errors,
+  coefficients$match_id[1] + 1.96 * standard_errors
+)
+
+# Display the results
+result <- data.frame(
+  feature = names(coefficients$match_id[1]),
+  estimate = coefficients$match_id[1],
+  lower_bound = confidence_intervals[, 1],
+  upper_bound = confidence_intervals[, 2]
+)
+
+print(result)
+```
+
+
+```{r}
+texreg::screenreg(list(model2, final.model), digits = 3, single.row = TRUE, stars = 0,
+                  custom.model.names = c("Null Model", "Final Model"), custom.note = "")
+performance::icc(final.model)
+```
+
+
+  * To start I added all level 1 variables and systematically removed the 
+  insignificant variables one at a time to determine the best model with only
+  level 1 variables. This ended up being a model with placement and gold_left.
+  The next step followed the same pattern as the first, except with level 2 
+  variables. This model ended up being significantly better than the model with
+  purely level 1 variables, and included placement, gold_left, and 
+  match_avg_board_cost. Finally I considered adding random slopes for level 1 
+  variables as well as cross level interaction. Although the random slopes did
+  not significantly improve the model, an interaction between 
+  match_avg_board_cost and avg_unit_level did.
+  * My favorite model is my final model since it contains significant variables
+  as well as variables which make sense contextually.
+  
+    * intercept (-0.077893): For an average match, the predicted probability 
+    that a player is ranked Challenger is 0.48 when they placed 1st with an 
+    average amount of gold left in a match with an average average board cost.
+    
+    * placement2 (0.419823): For an average match, the predicted log-odds
+    that a player who got 2nd in a match with and average average board cost and
+    and average amount of gold leftover is ranked Challenger increases by 0.420
+    compared to a player who got 1st.
+      * Note: this makes sense because a challenger level player will not always play for
+      1st, but to get top 4 so they do not lose rank points. Getting 1st requires not
+      only skill but luck, and nothing makes any player luckier than another!
+    
+    * placement3-8 (X): For an average match, the predicted log-odds
+    that a player who got [3-8] in a match with and average average board cost and
+    and average amount of gold leftover is ranked Challenger decreases by X
+    compared to a player who got 1st.
+    
+    * gold_left (-0.006941): For an average match, the predicted probability 
+    that a player who got 1st in a match with an average average board cost is 
+    ranked Challenger decreases, each additional gold above the average amount 
+    of gold leftover multiplies the odds by 0.993.
+    
+    * match_avg_board_cost (-0.044787): For an average match, the predicted probability 
+    that a player who got 1st in a match with an average amount of gold leftover is 
+    ranked Challenger decreases, each additional gold above the average amount 
+    of gold leftover multiplies the odds by 0.956.
+    
+    * match_avg_board_cost:avg_unit_level (-0.128197): For an average match, the predicted probability 
+    that a player who got 1st in a match with an average amount of gold leftover and an average unit level is 
+    ranked Challenger decreases, each additional increase in 1 unit 
+    of match average board cost decreases the predicted change in the log-odds of
+    the player being ranked Challenger by and additional 0.128 units
+
+  *ASK ABOUT RESIDUAL ANALYSIS (below is my attempt)
+
+
+LOOK AT NORMALITY OF RANDOM EFFECTS NOT RESPONSE
+
+  * Future plans:
+    * Attempt to reduce the placement variable to a binary variable - whether
+    or not you placed top 4 (1-4) or bottom 4 (5-8). In this game a top 4 is 
+    considered a win and a bottom 4 a loss.
+      * This should also improve the interpretations of the model!
+
+```{r}
+residuals <- resid(final.model)
+plot(final.model)
+```
+
+  * The above plot of the residuals does not suggest that normality is broken 
+  for both cases where a player is ranked Challenger and when they are not. (is this what this is showing?)
+
+```{r}
+# infl <- influence(final.model)
+# plot(infl, which = 4, main = "Cook's distance")
+```
+
+  * The above code never finishes running...
+
+```{r}
+library(pROC)
+predicted_probabilities <- predict(final.model, type = "response")
+roc_curve <- roc(df_TFT$is_challenger, predicted_probabilities)
+plot(roc_curve, main = "ROC Curve")
+roc_curve$auc
+```
+
+  * A ROC-AUC of 0.9189 indicates that this model is very effective at 
+  distinguishing between Challenger and Non-Challenger ranked players. 
+
+```{r}
+set.seed(123)  # Set seed for reproducibility
+
+# Create a vector of indices for the training set
+train_indices <- sample(seq_len(nrow(df_TFT)), size = 0.8 * nrow(df_TFT))
+
+# Split the data into training and testing sets
+train_data <- df_TFT[train_indices, ]
+test_data <- df_TFT[-train_indices, ]
+
+# Fit the GLMER model on the training data
+model <- glmer(is_challenger ~ placement 
+                     + match_avg_board_cost 
+                     + avg_unit_level*match_avg_board_cost
+                     + (1 | match_id), 
+                     family = "binomial", 
+                     data = df_TFT)
+
+# Predict on the test data
+predicted_probabilities <- predict(model, newdata = test_data, type = "response")
+predicted_classes <- ifelse(predicted_probabilities > 0.5, 1, 0)  # Assuming a binary response
+
+# Create the confusion matrix
+actual_classes <- test_data$is_challenger
+confusion_matrix <- table(Actual = actual_classes, Predicted = predicted_classes)
+
+# Evaluate performance metrics
+accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+precision <- confusion_matrix[2, 2] / sum(confusion_matrix[, 2])
+recall <- confusion_matrix[2, 2] / sum(confusion_matrix[2, ])
+f1_score <- 2 * (precision * recall) / (precision + recall)
+
+confusion_matrix
+accuracy
+precision
+recall
+f1_score
+
+sum(as.logical(df_TFT$is_challenger)) / nrow(df_TFT)
+(nrow(df_TFT) - sum(as.logical(df_TFT$is_challenger))) / nrow(df_TFT)
+```
+
+
+
