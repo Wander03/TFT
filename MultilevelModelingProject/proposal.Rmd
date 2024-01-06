@@ -1,0 +1,139 @@
+---
+title: "Project 1 - Proposal and Data Assembly"
+author: "Andrew Kerr"
+date: "2023-10-15"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(eval = TRUE)
+options(digits=4)
+```
+
+```{r, message=FALSE, include=FALSE, warning=FALSE}
+library(tidyverse)
+library(RPostgres)
+library(RPostgreSQL)
+library(kableExtra)
+load(url("http://www.rossmanchance.com/iscam3/ISCAM.RData"))
+```
+
+```{r, include=FALSE}
+# Replace these values with your Supabase database details
+host <- "db.bnnpxoerfnicvlkamcdv.supabase.co"
+dbname <- "postgres"
+user <- "postgres"
+password <- "0anadhrVeMVHTXxq"
+
+# Establish a connection to the Supabase database
+con <- dbConnect(RPostgres::Postgres(), 
+                 host = host, 
+                 dbname = dbname, 
+                 user = user, 
+                 password = password)
+
+# match_history <- dbGetQuery(con, "SELECT * FROM match_history")
+# match_info <- dbGetQuery(con, "SELECT * FROM match_info")
+# players <- dbGetQuery(con, "SELECT * FROM players")
+# rank_info <- dbGetQuery(con, "SELECT * FROM rank_info")
+
+q = "
+SELECT ri.tier, mh.match_id, p.name, mh.game_length, mh.tft_game_type, mi.placement, mi.level, 
+mi.last_round, mi.gold_left, mi.augment_1, mi.augment_2, mi.augment_3, 
+mi.traits, mi.units
+
+FROM match_history as mh
+
+JOIN match_info as mi ON mh.match_id = mi.match_id
+JOIN rank_info as ri ON mi.puuid = ri.puuid
+JOIN players as p ON ri.puuid = p.puuid
+
+WHERE mh.tft_game_type = 'RANKED' AND mh.tft_set_core_name = 'TFTSet9_2'
+"
+df_TFT = dbGetQuery(con, q)
+
+
+# Close connection to Supabase database
+dbDisconnect(con)
+```
+
+# Research Question
+
+One of my favorite games to play is Team Fight Tactics (TFT), a real-time 
+strategy game centered around managing gold, augments (game modifiers different 
+for each player), units, and traits (each unit has 1-3 traits), where 8 players 
+fight it out to be the last one standing. 
+
+One method of measuring the skill of a player is by looking at their tier. 
+The tiers in TFT go as follows (from lowest to highest):
+
+  + Iron
+  + Bronze
+  + Silver
+  + Gold
+  + Platinum
+  + Diamond
+  + Masters
+  + Grandmasters
+  + Challenger
+
+For example, a Silver player is ranked lower than a Gold player.
+
+I am interested in whether you can determine a players tier based on the results
+of a match of TFT. In other words,
+
+  + Are there distinct play styles or mannerism associated with different tiers 
+  in TFT?
+
+I have collected a random sample of matches from different tiers of ranked TFT.
+The variables I have decided to include are:
+
+  + placement: a measure of how well a player performed in a match compared to 
+  other players in the match
+    - I may create subgroups for each placement 
+  + level: a measure of how well strong a player was in a match
+  + last_round: what round a player is eliminated from a match
+  + gold_left: amount of gold a player had when the were eliminated from a match
+  + augment_1-3: game modifier selected by a player during the match
+  + traits: active traits a player had when they were eliminated
+  + units: units a player was using when they were eliminated
+  + game_length: how long (in seconds) a match lasted
+  + tier: what tier the player currently is
+
+# Data
+
+Over the summer I worked on using the Riot API (company that owns TFT) to 
+collect my match history. I have re-purposed the code to now collect match
+history for any tier of player. I provide the tier I desire, and my program 
+acquires 205 randomly selected players from the tier and adds their 5 most 
+recently played matches to my database. For each match I collect information
+on all 8 players and how they performed in the match. Below is an observation 
+from a data set created from a combination of my SQL tables (traits and units 
+will need to be re-structured for this project):
+
+```{r}
+head(df_TFT, 1)
+```
+
+# Multileveled Structure
+
+I plan to talk to you more about this, but here is what I am considering:
+
+  + Observational units: individual player outcomes in a match
+  + Level 1: player (8 players from each match)
+  + Level 2: match (10k+ matches, I am currently collecting them overnight, there was a bug in my code :( ) 
+
+# Variable Chart
+
+```{r, include=FALSE}
+tbl <- data.frame(Name = c("Tier", "placement", "level", "last round", "gold left", "legend augment count", "game length", "avg unit level", "traits", "avg level"),
+                  VariableRole = c("Response", "Level 1 Predictor", "Level 1 Predictor", "Level 1 Predictor", "Level 1 Predictor", "Level 1 Predictor", "Level 2 Predicotr", "Level 1 Predictor", "Level 1 Predictor", "Level 2 Predictor"),
+                  Type = c("Categorical", "Categorical", "Categorical", "Categorical", "Quantitative", "Categorical", "Quantitative", "Quantitative", "Categorical", "Quantitative"),
+                  Values = c("Iron, Bronze, Silver, Gold, Platinum, Diamond, Masters, Grandmasters, Challenger", "1 to 8", "1 to 10", "1 to 50", "0 to 200", "how many legend augments were chosen => 0 to 3", "0 to 3600 (seconds)", "each unit can be between level 1 and 3 => 1 to 3", "list of active traits (will dummify; total of 28)", "mean level of a match"))
+```
+
+```{r}
+kable(tbl, format = "simple")
+```
