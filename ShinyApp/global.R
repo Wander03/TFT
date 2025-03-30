@@ -196,57 +196,83 @@ get_unit_specific_traits <- function(units_df) {
 find_horizontal_comp_correct <- function(emblems, units_df, trait_thresholds, spec_traits, team_size = 8) {
   # Precompute trait weights (prioritize higher-breakpoint traits)
   trait_weights <- map_dbl(names(trait_thresholds), ~ {
-    max(trait_thresholds[[.x]] %||% 0)  # Weight = highest breakpoint (e.g., 2 for 2/4/6)
+    max_units <- max(trait_thresholds[[.x]] %||% 0)
+    # Count how many units have this trait
+    units_with_trait <- sum(map_lgl(units_df$traits, function(unit_traits) .x %in% unit_traits))
+    max_units * units_with_trait  # Weight by both breakpoint and availability
   }) %>% set_names(names(trait_thresholds))
-  
+
   best_team <- NULL
   best_score <- -Inf
-
-  # Iterate through possible starting units
-  for (seed_unit in units_df$unit_name) {
-    current_team <- seed_unit
-    remaining_units <- setdiff(units_df$unit_name, current_team)
+  best_traits <- list()
+  
+  # Try multiple starting points based on different criteria
+  starting_units <- list(
+    # Highest cost units first
+    units_df %>% arrange(desc(cost)) %>% pull(unit_name),
+    # Units with most traits
+    units_df %>% 
+      mutate(trait_count = map_int(traits, length)) %>% 
+      arrange(desc(trait_count)) %>% pull(unit_name),
+    # Units that activate the most valuable traits
+    units_df %>% 
+      mutate(score = map_dbl(traits, ~ sum(trait_weights[.x]))) %>% 
+      arrange(desc(score)) %>% pull(unit_name)
+  )
+  
+  # Try each starting strategy
+  for (start_seq in starting_units) {
+    current_team <- character(0)
+    remaining_units <- start_seq
     
     while (length(current_team) < team_size && length(remaining_units) > 0) {
-      # Score all candidates
-      candidate_scores <- map_dbl(remaining_units, ~ {
-        sim_team <- c(current_team, .x)
-        sim_traits <- count_activated_traits(sim_team, emblems, units_df, trait_thresholds)
+      # Score all remaining units
+      scores <- map_dbl(remaining_units, ~ {
+        potential_team <- c(current_team, .x)
+        traits <- count_activated_traits(potential_team, emblems, units_df, trait_thresholds)
         
-        # Reward: Number of activated traits (weighted by breakpoint)
-        reward <- sum(trait_weights[names(sim_traits)])
-        
-        # Penalty: Unit-specific traits
-        penalty <- sum(names(sim_traits) %in% spec_traits) * 0.5
-        
-        reward - penalty
+        # Score based on activated traits and their weights
+        sum(trait_weights[names(traits) %||% character(0)]) - 
+          sum(names(traits) %in% spec_traits) * 0.5  # Penalize unit-specific traits
       })
       
-      # Select best candidate
-      best_candidate <- remaining_units[which.max(candidate_scores)]
-      current_team <- c(current_team, best_candidate)
-      remaining_units <- setdiff(remaining_units, best_candidate)
+      # Select best unit
+      best_idx <- which.max(scores)
+      if (length(best_idx) == 0) break
+      
+      current_team <- c(current_team, remaining_units[best_idx])
+      remaining_units <- remaining_units[-best_idx]
     }
     
     # Evaluate final team
-    final_traits <- count_activated_traits(current_team, emblems, units_df, trait_thresholds)
-    final_score <- length(final_traits)  # Total activated traits
+    current_traits <- count_activated_traits(current_team, emblems, units_df, trait_thresholds)
+    current_score <- sum(trait_weights[names(current_traits) %||% character(0)])
     
-    if (final_score > best_score) {
+    if (current_score > best_score) {
       best_team <- current_team
-      best_score <- final_score
+      best_score <- current_score
+      best_traits <- current_traits
     }
   }
   
-  # Fallback if no team found (shouldn't happen)
-  if (is.null(best_team)) {
-    best_team <- head(units_df$unit_name, team_size)
+  # Fill any remaining slots with highest value units
+  if (length(best_team) < team_size) {
+    remaining <- units_df %>% 
+      filter(!unit_name %in% best_team) %>%
+      mutate(score = map_dbl(traits, ~ sum(trait_weights[.x %||% character(0)]))) %>%
+               arrange(desc(score), desc(cost)) %>%
+               pull(unit_name)
+             
+             if (length(remaining) > 0) {
+               best_team <- c(best_team, remaining[1:min(length(remaining), team_size - length(best_team))])
+               best_traits <- count_activated_traits(best_team, emblems, units_df, trait_thresholds)
+             }
   }
   
   list(
     team = best_team,
-    activated_traits = count_activated_traits(best_team, emblems, units_df, trait_thresholds),
-    num_activated = best_score
+    activated_traits = best_traits,
+    num_activated = length(best_traits)
   )
 }
 

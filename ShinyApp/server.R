@@ -42,7 +42,7 @@ server <- function(input, output, session) {
     
     # Get selected emblems (now using trait names directly)
     emblems <- c(input$emblem1, input$emblem2, input$emblem3)
-    emblems <- emblems[emblems != ""]
+    emblems <- emblems[emblems != "" & emblems != "None"]
     team_size <- input$team_size
     
     # Get forced trait if selected (using trait name)
@@ -63,9 +63,15 @@ server <- function(input, output, session) {
     }
     
     # Balanced composition
+    horiz_set_data <- current_set()
+    if (input$horiz_cost_limit < 5) {
+      horiz_set_data$units <- horiz_set_data$units %>% 
+        filter(cost <= input$horiz_cost_limit)
+    }
+    
     balanced_comp <- generate_teams_correct(
       emblems = emblems,
-      set_data = current_set(),
+      set_data = horiz_set_data,
       strategy = "horizontal",
       team_size = team_size
     )

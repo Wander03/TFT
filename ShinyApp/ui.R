@@ -150,6 +150,13 @@ ui <- fluidPage(
       numericInput("team_size", "Team Size", 
                    value = 8, min = 1, max = 10, step = 1),
       
+      h4("Horizontal Comp Cost Limit"),
+      pickerInput("horiz_cost_limit", "Max Unit Cost (BFL Only):",
+                  choices = c("No limit" = 5, 1, 2, 3, 4, 5),
+                  selected = 5,
+                  multiple = FALSE,
+                  options = list(`live-search` = FALSE)),
+      
       hr(),
       h4("Emblem Selection"),
       pickerInput("emblem1", "Emblem 1",
