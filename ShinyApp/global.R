@@ -2,7 +2,7 @@ library(tidyverse)
 library(jsonlite)
 library(memoise)
 
-# TODO: add check for if set exists in get_set (or manually list these options for user to choose)
+# TODO: improve BFL alg
 
 url <- "https://raw.communitydragon.org/latest/cdragon/tft/en_us.json"
 image_url <- "https://raw.communitydragon.org/pbe/game/assets/ux/tft/championsplashes/patching/"
