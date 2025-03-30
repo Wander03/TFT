@@ -1,35 +1,58 @@
-library(plotly)
-fluidPage(
-  # Application title
-  titlePanel("Exploring Fake News"),
+library(shiny)
+library(shinyWidgets)
+library(bslib)
+
+ui <- fluidPage(
+  theme = bs_theme(bootswatch = "flatly"),
+  titlePanel("Wandering Trainer Helper"),
   
   sidebarLayout(
-    # Sidebar with a select input for choosing between website, country, and author
     sidebarPanel(
-      selectInput("selection_type", "Choose Analysis Type:",
-                  choices = c("Country", "Website", "Author")),  # Add website, country, and author options
-      uiOutput("analysis_input"),  # Dynamic UI for website, country, or author selection
-      actionButton("update", "Submit"),
+      width = 3,
+      h4("Set Selection"),
+      selectInput("set_select", "Choose Set:",
+                  choices = c("Set 11", "Set 12", "Set 13"),
+                  selected = "Set 13"),
       
-      # Title above sliders
+      h4("Team Configuration"),
+      numericInput("team_size", "Team Size", 
+                   value = 8, min = 1, max = 10, step = 1),
+      
       hr(),
-      tags$br(),  # Line break
-      tags$h4("For Word Cloud"),  # Title
+      h4("Emblem Selection"),
+      pickerInput("emblem1", "Emblem 1",
+                  choices = NULL,
+                  options = list(`live-search` = TRUE)),
+      pickerInput("emblem2", "Emblem 2", 
+                  choices = NULL,
+                  options = list(`live-search` = TRUE)),
+      pickerInput("emblem3", "Emblem 3",
+                  choices = NULL,
+                  options = list(`live-search` = TRUE)),
       
-      sliderInput("freq",
-                  "Minimum Frequency:",
-                  min = 1,  max = 50, value = 5),
-      sliderInput("max",
-                  "Maximum Number of Words:",
-                  min = 1,  max = 100,  value = 50)
+      hr(),
+      h4("Strategy Options"),
+      pickerInput("force_vertical", "Force Vertical",
+                  choices = NULL,
+                  multiple = FALSE,
+                  options = list(`actions-box` = TRUE,
+                                 `live-search` = TRUE)),
+      
+      actionButton("generate", "Generate Composition",
+                   class = "btn-primary",
+                   icon = icon("chess-board"))
     ),
     
-    # Show Plots
     mainPanel(
-      plotOutput("cloudplot"),
-      plotOutput("barchart"),
-      plotlyOutput("piechart")
+      width = 9,
+      tabsetPanel(
+        tabPanel("Recommended Comps",
+                 DT::DTOutput("compositions_table")),  # Corrected here
+        tabPanel("Trait Breakdown",
+                 plotOutput("trait_plot")),
+        tabPanel("Item Guide",
+                 uiOutput("item_guide"))
+      )
     )
-    
   )
 )
