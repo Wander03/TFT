@@ -369,6 +369,18 @@ generate_teams_correct <- function(emblems, set_data, strategy = "horizontal", t
 # -----------------------------------------------------------------------------#
 # Format Champion Images
 
+# Helper function for cost colors
+get_cost_color <- function(cost) {
+  case_when(
+    cost == 1 ~ "#b0c3d9",
+    cost == 2 ~ "#5a9e6e",
+    cost == 3 ~ "#4a6ba8",
+    cost == 4 ~ "#c44feb",
+    cost == 5 ~ "#f0b040",
+    TRUE ~ "#b0c3d9"  # Default to 1-cost color
+  )
+}
+
 display_team_with_images <- function(team, set_data) {
   # Get image URLs for each champion and sort by cost
   team_df <- set_data$units %>% 

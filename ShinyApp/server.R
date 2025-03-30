@@ -100,126 +100,114 @@ server <- function(input, output, session) {
     )
   })
     
-    output$vertical_team <- renderUI({
-      req(compositions()$vertical)
-      team <- compositions()$vertical$team
-      HTML(paste(team, collapse = "<br>"))
-    })
-    
-    # Balanced composition outputs
-    output$num_traits <- renderText({
-      req(compositions()$balanced)
-      compositions()$balanced$num_activated
-    })
-    
-    output$balanced_traits <- renderUI({
-      req(compositions()$balanced)
-      traits <- compositions()$balanced$activated_traits
-      tagList(
-        tags$ul(
-          lapply(names(traits), function(trait) {
-            tags$li(paste(trait, ":", traits[[trait]]))
-          })
-        )
+  output$vertical_team <- renderUI({
+    req(compositions()$vertical)
+    team <- compositions()$vertical$team
+    HTML(paste(team, collapse = "<br>"))
+  })
+  
+  # Balanced composition outputs
+  output$num_traits <- renderText({
+    req(compositions()$balanced)
+    compositions()$balanced$num_activated
+  })
+  
+  output$balanced_traits <- renderUI({
+    req(compositions()$balanced)
+    traits <- compositions()$balanced$activated_traits
+    tagList(
+      tags$ul(
+        lapply(names(traits), function(trait) {
+          tags$li(paste(trait, ":", traits[[trait]]))
+        })
       )
-    })
-      
-      output$balanced_team <- renderUI({
-        req(compositions()$balanced)
-        team <- compositions()$balanced$team
-        HTML(paste(team, collapse = "<br>"))
-      })
-      
-      # Trait breakdown plot
-      output$trait_plot <- renderPlot({
-        req(compositions())
-        # You would implement your plotting logic here
-        # For example:
-        traits_df <- data.frame(
-          Trait = names(compositions()$balanced$activated_traits),
-          Count = unlist(compositions()$balanced$activated_traits)
-        )
-        
-        ggplot(traits_df, aes(x = reorder(Trait, -Count), y = Count)) +
-          geom_col(fill = "steelblue") +
-          labs(title = "Trait Breakdown", x = "Trait", y = "Count") +
-          theme_minimal() +
-          theme(axis.text.x = element_text(angle = 45, hjust = 1))
-      })
-      
-      # Item guide
-      output$item_guide <- renderUI({
-        req(compositions())
-        # You would implement your item recommendation logic here
-        tagList(
-          h3("Recommended Items"),
-          tags$ul(
-            tags$li("Example Item 1"),
-            tags$li("Example Item 2"),
-            tags$li("Example Item 3")
+    )
+  })
+    
+  output$balanced_team <- renderUI({
+    req(compositions()$balanced)
+    team <- compositions()$balanced$team
+    HTML(paste(team, collapse = "<br>"))
+  })
+  
+  # Trait breakdown plot
+  output$trait_plot <- renderPlot({
+    req(compositions())
+    # You would implement your plotting logic here
+    # For example:
+    traits_df <- data.frame(
+      Trait = names(compositions()$balanced$activated_traits),
+      Count = unlist(compositions()$balanced$activated_traits)
+    )
+    
+    ggplot(traits_df, aes(x = reorder(Trait, -Count), y = Count)) +
+      geom_col(fill = "steelblue") +
+      labs(title = "Trait Breakdown", x = "Trait", y = "Count") +
+      theme_minimal() +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  })
+  
+  # Item guide
+  output$item_guide <- renderUI({
+    req(compositions())
+    # You would implement your item recommendation logic here
+    tagList(
+      h3("Recommended Items"),
+      tags$ul(
+        tags$li("Example Item 1"),
+        tags$li("Example Item 2"),
+        tags$li("Example Item 3")
+      )
+    )
+  })
+  
+  output$vertical_team <- renderUI({
+    req(compositions()$vertical)
+    display_team_with_images(compositions()$vertical$team, current_set())
+  })
+  
+  output$balanced_team <- renderUI({
+    req(compositions()$balanced)
+    display_team_with_images(compositions()$balanced$team, current_set())
+  })
+  
+  output$team_display <- renderUI({
+    req(compositions()$vertical, current_set())
+    
+    # Get team data with validated costs
+    team_data <- current_set()$units %>% 
+      filter(unit_name %in% compositions()$vertical$team) %>%
+      select(unit_name, pic, cost) %>%
+      mutate(
+        cost = as.integer(cost),
+        cost = ifelse(is.na(cost) | cost < 1 | cost > 5, 1, cost),  # Validate cost
+        pic = ifelse(is.na(pic) | pic == "", 
+                     "https://via.placeholder.com/60?text=Champion", 
+                     pic)  # Ensure image URL exists
+      ) %>%
+      arrange(desc(cost), unit_name)  # Sort by cost then name
+    
+    # Create champion cards with proper styling
+    tags$div(
+      class = "team-display",
+      lapply(1:nrow(team_data), function(i) {
+        tags$div(
+          class = "champion-card",
+          style = paste0("border: 3px solid ", 
+                         get_cost_color(team_data$cost[i]), ";"),  # Dynamic border color
+          tags$img(
+            src = team_data$pic[i],
+            class = "champion-image",
+            alt = team_data$unit_name[i],
+            onerror = "this.src='https://via.placeholder.com/60?text=Champion';"
+          ),
+          tags$div(
+            class = "champion-info",
+            tags$span(class = "champion-name", team_data$unit_name[i]),
+            tags$span(class = "champion-cost", paste0("(", team_data$cost[i], ")"))
           )
         )
       })
-      
-      output$vertical_team <- renderUI({
-        req(compositions()$vertical)
-        display_team_with_images(compositions()$vertical$team, current_set())
-      })
-      
-      output$balanced_team <- renderUI({
-        req(compositions()$balanced)
-        display_team_with_images(compositions()$balanced$team, current_set())
-      })
-      
-      output$team_display <- renderUI({
-        req(compositions()$vertical, current_set())
-        
-        # Get team data with validated costs
-        team_data <- current_set()$units %>% 
-          filter(unit_name %in% compositions()$vertical$team) %>%
-          select(unit_name, pic, cost) %>%
-          mutate(
-            cost = as.integer(cost),
-            cost = ifelse(is.na(cost) | cost < 1 | cost > 5, 1, cost),  # Validate cost
-            pic = ifelse(is.na(pic) | pic == "", 
-                         "https://via.placeholder.com/60?text=Champion", 
-                         pic)  # Ensure image URL exists
-          ) %>%
-          arrange(desc(cost), unit_name)  # Sort by cost then name
-        
-        # Create champion cards with proper styling
-        tags$div(
-          class = "team-display",
-          lapply(1:nrow(team_data), function(i) {
-            tags$div(
-              class = "champion-card",
-              style = paste0("border: 3px solid ", 
-                             get_cost_color(team_data$cost[i]), ";"),  # Dynamic border color
-              tags$img(
-                src = team_data$pic[i],
-                class = "champion-image",
-                alt = team_data$unit_name[i],
-                onerror = "this.src='https://via.placeholder.com/60?text=Champion';"
-              ),
-              tags$div(
-                class = "champion-info",
-                tags$span(class = "champion-name", team_data$unit_name[i]),
-                tags$span(class = "champion-cost", paste0("(", team_data$cost[i], ")"))
-              )
-            )
-          })
-        )
-      })
-      
-      # Helper function for cost colors
-      get_cost_color <- function(cost) {
-        case_when(
-          cost == 1 ~ "#b0c3d9",
-          cost == 2 ~ "#5a9e6e",
-          cost == 3 ~ "#4a6ba8",
-          cost == 4 ~ "#c44feb",
-          cost == 5 ~ "#f0b040",
-          TRUE ~ "#b0c3d9"  # Default to 1-cost color
-        )
-      }
+    )
+  })
 }
