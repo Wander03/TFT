@@ -5,6 +5,7 @@ library(memoise)
 # TODO: add check for if set exists in get_set (or manually list these options for user to choose)
 
 url <- "https://raw.communitydragon.org/latest/cdragon/tft/en_us.json"
+image_url <- "https://raw.communitydragon.org/pbe/game/assets/ux/tft/championsplashes/patching/"
 tft_data <- fromJSON(url)
 
 # -----------------------------------------------------------------------------#
@@ -47,6 +48,9 @@ get_set_data <- memoise(function(set = NA) {
     cost = set_data$champions[[1]]$cost,
     traits = sapply(set_data$champions[[1]]$traits, 
                     function(x) paste(x, collapse = ", ")),
+    pic = paste0(image_url,
+                 tolower(set_data$champions[[1]]$apiName),
+                         "_teamplanner_splash.png"),
     stringsAsFactors = FALSE
   ) %>%
     filter(nchar(traits) > 0)  # Remove units with no traits
@@ -60,14 +64,14 @@ get_set_data <- memoise(function(set = NA) {
   
   breakpoints <- lapply(set_data$traits[[1]]$effects, function(eff) {
     if (!is.null(eff)) {
-      units_needed = eff$minUnits
+      units_needed = as.numeric(eff$minUnits)
     }
   })
   
   traits_table <- traits_table %>%
     mutate(
       breakpoints = map(breakpoints, function(bp) {
-        if (is.null(bp)) NA else as.character(bp)
+        if (is.null(bp)) NA else bp
       })
     ) %>%
     arrange(trait_name)
@@ -120,3 +124,268 @@ get_craftable_emblems <- function(set_data) {
 }
 
 # -----------------------------------------------------------------------------#
+# Generate Team Compositions
+
+# Helper functions
+`%||%` <- function(a, b) if (!is.null(a)) a else b
+
+precompute_trait_thresholds <- function(traits_df) {
+  traits_df %>%
+    select(trait_name, breakpoints) %>%
+    mutate(breakpoints = map(breakpoints, ~ as.numeric(.x))) %>%
+    {set_names(.$breakpoints, .$trait_name)} # Using trait_name as names
+}
+
+preprocess_units <- function(units_df) {
+  units_df %>%
+    mutate(
+      traits = strsplit(traits, ", "),
+      unit_id = row_number()
+    ) %>%
+    select(unit_id, unit_name, cost, traits)
+}
+
+# Improved trait counting that properly checks thresholds
+count_activated_traits <- function(units, emblems, units_df, trait_thresholds) {
+  # Combine unit traits and emblems
+  all_traits <- unique(c(emblems, unlist(units_df$traits[units_df$unit_name %in% units])))
+  
+  # Count each trait
+  counts <- setNames(rep(0, length(all_traits)), all_traits)
+  counts[emblems] <- table(emblems)
+  
+  for (unit in units) {
+    unit_traits <- units_df$traits[[which(units_df$unit_name == unit)]]
+    for (trait in unit_traits) {
+      counts[trait] <- counts[trait] + 1
+    }
+  }
+  
+  # Check which traits meet their thresholds
+  activated <- map_lgl(names(counts), ~ {
+    thresh <- trait_thresholds[[.x]] %||% numeric(0)
+    any(counts[.x] >= thresh)
+  })
+  
+  # Return only activated traits with their counts
+  counts[activated]
+}
+
+# Helper function to identify unit-specific traits
+get_unit_specific_traits <- function(units_df) {
+  # First split all trait combinations into individual traits
+  all_traits <- units_df %>%
+    select(unit_name, traits) %>%
+    mutate(
+      # Split combined traits into individual ones
+      traits_split = map(traits, ~ unlist(strsplit(., ", ")))
+    )
+      
+  # Count how many units have each individual trait
+  trait_counts <- all_traits %>%
+    select(unit_name, traits = traits_split) %>%
+    unnest(traits) %>%
+    count(traits, name = "unit_count") %>%
+    filter(unit_count == 1) %>%
+    pull(traits)
+  
+  return(trait_counts)
+}
+
+# Optimized horizontal composition with correct trait activation
+find_horizontal_comp_correct <- function(emblems, units_df, trait_thresholds, spec_traits, team_size = 8) {
+  # Precompute trait weights (prioritize higher-breakpoint traits)
+  trait_weights <- map_dbl(names(trait_thresholds), ~ {
+    max(trait_thresholds[[.x]] %||% 0)  # Weight = highest breakpoint (e.g., 2 for 2/4/6)
+  }) %>% set_names(names(trait_thresholds))
+  
+  best_team <- NULL
+  best_score <- -Inf
+
+  # Iterate through possible starting units
+  for (seed_unit in units_df$unit_name) {
+    current_team <- seed_unit
+    remaining_units <- setdiff(units_df$unit_name, current_team)
+    
+    while (length(current_team) < team_size && length(remaining_units) > 0) {
+      # Score all candidates
+      candidate_scores <- map_dbl(remaining_units, ~ {
+        sim_team <- c(current_team, .x)
+        sim_traits <- count_activated_traits(sim_team, emblems, units_df, trait_thresholds)
+        
+        # Reward: Number of activated traits (weighted by breakpoint)
+        reward <- sum(trait_weights[names(sim_traits)])
+        
+        # Penalty: Unit-specific traits
+        penalty <- sum(names(sim_traits) %in% spec_traits) * 0.5
+        
+        reward - penalty
+      })
+      
+      # Select best candidate
+      best_candidate <- remaining_units[which.max(candidate_scores)]
+      current_team <- c(current_team, best_candidate)
+      remaining_units <- setdiff(remaining_units, best_candidate)
+    }
+    
+    # Evaluate final team
+    final_traits <- count_activated_traits(current_team, emblems, units_df, trait_thresholds)
+    final_score <- length(final_traits)  # Total activated traits
+    
+    if (final_score > best_score) {
+      best_team <- current_team
+      best_score <- final_score
+    }
+  }
+  
+  # Fallback if no team found (shouldn't happen)
+  if (is.null(best_team)) {
+    best_team <- head(units_df$unit_name, team_size)
+  }
+  
+  list(
+    team = best_team,
+    activated_traits = count_activated_traits(best_team, emblems, units_df, trait_thresholds),
+    num_activated = best_score
+  )
+}
+
+# Optimized vertical composition with correct trait activation
+find_vertical_comp_correct <- function(emblems, units_df, trait_thresholds, spec_traits, team_size = 8, forced_trait = NULL) {
+  # Initialize
+  selected_units <- character(0)
+  current_counts <- table(emblems)
+  all_traits <- unique(c(names(current_counts), unlist(units_df$traits)))
+  current_counts <- setNames(rep(0, length(all_traits)), all_traits)
+  current_counts[names(table(emblems))] <- table(emblems)
+  
+  # Determine primary trait
+  if (is.null(forced_trait)) {
+    primary_trait <- names(which.max(map_dbl(all_traits, ~ max(trait_thresholds[[.x]] %||% 0))))
+  } else {
+    primary_trait <- forced_trait
+  }
+  
+  primary_thresholds <- trait_thresholds[[primary_trait]] %||% numeric(0)
+  
+  # First pass: maximize primary trait with highest cost units first
+  primary_units <- units_df %>%
+    filter(map_lgl(traits, ~ primary_trait %in% .x)) %>%
+    arrange(desc(cost)) %>%
+    pull(unit_name)
+  
+  for (unit in primary_units) {
+    if (length(selected_units) >= team_size) break
+    
+    current_count <- current_counts[primary_trait]
+    next_threshold <- primary_thresholds[primary_thresholds > current_count][1]
+    
+    if (is.na(next_threshold)) break
+    
+    selected_units <- c(selected_units, unit)
+    unit_traits <- units_df$traits[[which(units_df$unit_name == unit)]]
+    for (trait in unit_traits) {
+      if (trait %notin% spec_traits) {
+        current_counts[trait] <- current_counts[trait] + 1
+      }
+    }
+  }
+  
+  # Fill remaining slots with units that activate the most new traits
+  if (length(selected_units) < team_size) {
+    remaining_units <- units_df %>%
+      filter(!unit_name %in% selected_units) %>%
+      mutate(
+        new_activations = map_dbl(unit_name, ~ {
+          unit_traits <- traits[[which(unit_name == .x)]]
+          sum(map_dbl(unit_traits, ~ {
+            thresh <- trait_thresholds[[.x]] %||% numeric(0)
+            current_active <- any(current_counts[.x] >= thresh)
+            new_active <- any((current_counts[.x] + 1) >= thresh)
+            ifelse(new_active && !current_active, 1, 0)
+          }))
+        })
+      ) %>%
+      arrange(desc(new_activations), desc(cost)) %>%
+      pull(unit_name)
+    
+    to_add <- min(length(remaining_units), team_size - length(selected_units))
+    selected_units <- c(selected_units, remaining_units[1:to_add])
+  }
+  
+  # Calculate final activated traits
+  activated_traits <- count_activated_traits(selected_units, emblems, units_df, trait_thresholds)
+  
+  list(
+    team = selected_units,
+    activated_traits = activated_traits,
+    num_activated = length(activated_traits),
+    primary_trait = primary_trait
+  )
+}
+
+# Wrapper function
+generate_teams_correct <- function(emblems, set_data, strategy = "horizontal", team_size = 8, forced_trait = NULL) {
+  # Preprocess data
+  units_df <- preprocess_units(set_data$units)
+  trait_thresholds <- precompute_trait_thresholds(set_data$traits)
+  spec_traits <- get_unit_specific_traits(set_data$units)
+  
+  if (strategy == "horizontal") {
+    find_horizontal_comp_correct(emblems, units_df, trait_thresholds, spec_traits, team_size)
+  } else if (strategy == "vertical") {
+    find_vertical_comp_correct(emblems, units_df, trait_thresholds, spec_traits, team_size, forced_trait)
+  } else {
+    stop("Invalid strategy. Choose 'horizontal' or 'vertical'")
+  }
+}
+
+# -----------------------------------------------------------------------------#
+# Format Champion Images
+
+display_team_with_images <- function(team, set_data) {
+  # Get image URLs for each champion and sort by cost
+  team_df <- set_data$units %>% 
+    filter(unit_name %in% team) %>%
+    select(unit_name, pic, cost, traits) %>%
+    arrange(cost)  # Sort by cost low to high
+  
+  # Create HTML for each champion with image
+  champion_tags <- lapply(1:nrow(team_df), function(i) {
+    cost <- team_df$cost[i]
+    cost_class <- ifelse(cost %in% 1:5, paste0("cost-", cost), "cost-1")
+    
+    # Format traits as badges
+    trait_badges <- lapply(strsplit(team_df$traits[i], ", ")[[1]], function(trait) {
+      tags$span(class = "trait-badge", trait)
+    })
+    
+    tags$div(
+      class = "champion-container",
+      tags$div(
+        class = paste("champion-card", cost_class),
+        style = paste0("--cost-color: ", get_cost_color(cost), ";"),
+        # Trait tooltip
+        tags$div(
+          class = "trait-tooltip",
+          do.call(tags$div, trait_badges)
+        ),
+        tags$img(
+          src = team_df$pic[i],
+          class = "champion-img",
+          alt = team_df$unit_name[i]
+        ),
+        tags$div(
+          class = "champion-name",
+          team_df$unit_name[i]
+        ),
+        tags$div(
+          class = "champion-cost",
+          cost
+        )
+      )
+    )
+  })
+  
+  tags$div(class = "team-display", champion_tags)
+}

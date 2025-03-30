@@ -1,10 +1,142 @@
 library(shiny)
 library(shinyWidgets)
 library(bslib)
+library(DT)
 
 ui <- fluidPage(
   theme = bs_theme(bootswatch = "flatly"),
-  titlePanel("Wandering Trainer Helper"),
+  titlePanel("TFT Team Compositions Generator"),
+  
+  # Add custom CSS for champion displays
+  tags$style(HTML("
+    /* Main team container */
+    .team-display {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+      gap: 15px;
+      padding: 15px;
+      background: #f8f9fa;
+      border-radius: 8px;
+    }
+    
+    /* Champion card */
+    .champion-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 8px;
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--cost-color) 10%, white 90%);
+      border: 3px solid var(--cost-color);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      transition: transform 0.2s;
+    }
+    
+    /* Hover effect */
+    .champion-card:hover {
+      transform: scale(1.05);
+      z-index: 1;
+    }
+    
+    /* Champion image */
+    .champion-img {
+      width: 60px;
+      height: 60px;
+      border-radius: 5px;
+      object-fit: cover;
+      margin-bottom: 5px;
+      border: 2px solid rgba(255,255,255,0.3);
+    }
+    
+    /* Champion name - improved visibility */
+    .champion-name {
+      font-size: 12px;
+      font-weight: 700;
+      color: #333;
+      text-align: center;
+      margin-top: 3px;
+      text-shadow: 0 1px 1px rgba(255,255,255,0.7);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+    }
+    
+    /* Cost indicator */
+    .champion-cost {
+      font-size: 10px;
+      font-weight: 600;
+      color: white;
+      background-color: var(--cost-color);
+      border-radius: 10px;
+      padding: 1px 6px;
+      margin-top: 3px;
+      display: inline-block;
+    }
+    
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+      .team-display {
+        grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+      }
+      .champion-img {
+        width: 50px;
+        height: 50px;
+      }
+      .champion-name {
+        font-size: 11px;
+      }
+    }
+    
+    /* Trait popup styling */
+    .trait-tooltip {
+      position: absolute;
+      bottom: calc(100% + 5px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: #2d3748;
+      color: white;
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      white-space: nowrap;
+      z-index: 10;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.15s ease-out;
+      pointer-events: none;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    
+    /* Arrow for tooltip */
+    .trait-tooltip::after {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      border-width: 5px;
+      border-style: solid;
+      border-color: #2d3748 transparent transparent transparent;
+    }
+    
+    .champion-container:hover .trait-tooltip {
+      opacity: 1;
+      visibility: visible;
+      transform: translateX(-50%) translateY(-5px);
+    }
+    
+    /* Individual trait styling */
+    .trait-badge {
+      display: inline-block;
+      background: rgba(255,255,255,0.1);
+      padding: 2px 6px;
+      border-radius: 10px;
+      margin: 1px;
+      font-size: 11px;
+    }
+")),
   
   sidebarLayout(
     sidebarPanel(
@@ -21,24 +153,25 @@ ui <- fluidPage(
       hr(),
       h4("Emblem Selection"),
       pickerInput("emblem1", "Emblem 1",
-                  choices = NULL,
+                  choices = c("None"),
+                  selected = "None",
                   options = list(`live-search` = TRUE)),
       pickerInput("emblem2", "Emblem 2", 
-                  choices = NULL,
+                  choices = c("None"),
+                  selected = "None",
                   options = list(`live-search` = TRUE)),
       pickerInput("emblem3", "Emblem 3",
-                  choices = NULL,
+                  choices = c("None"),
+                  selected = "None",
                   options = list(`live-search` = TRUE)),
-      
       hr(),
       h4("Strategy Options"),
-      pickerInput("force_vertical", "Force Vertical",
-                  choices = NULL,
+      pickerInput("force_vertical", "Force Vertical Trait",
+                  choices = c("None"),
+                  selected = "None",
                   multiple = FALSE,
-                  options = list(`actions-box` = TRUE,
-                                 `live-search` = TRUE)),
-      
-      actionButton("generate", "Generate Composition",
+                  options = list(`live-search` = TRUE)),
+      actionButton("generate", "Generate Compositions",
                    class = "btn-primary",
                    icon = icon("chess-board"))
     ),
@@ -46,8 +179,36 @@ ui <- fluidPage(
     mainPanel(
       width = 9,
       tabsetPanel(
-        tabPanel("Recommended Comps",
-                 DT::DTOutput("compositions_table")),  # Corrected here
+        tabPanel("Compositions",
+                 fluidRow(
+                   column(6,
+                          wellPanel(
+                            h3("Vertical Approach", style = "color: #4a7c59;"),
+                            h4("Primary Trait:", style = "font-weight: bold;"),
+                            textOutput("primary_trait"),
+                            hr(),
+                            h4("Activated Traits:"),
+                            uiOutput("vertical_traits"),
+                            hr(),
+                            h4("Team Composition:"),
+                            uiOutput("vertical_team")
+                          )
+                   ),
+                   column(6,
+                          wellPanel(
+                            h3("Bronze for Life Approach", style = "color: #3a5a78;"),
+                            h4("Number of Activated Traits:", style = "font-weight: bold;"),
+                            textOutput("num_traits"),
+                            hr(),
+                            h4("Activated Traits:"),
+                            uiOutput("balanced_traits"),
+                            hr(),
+                            h4("Team Composition:"),
+                            uiOutput("balanced_team")
+                          )
+                   )
+                 )
+        ),
         tabPanel("Trait Breakdown",
                  plotOutput("trait_plot")),
         tabPanel("Item Guide",
