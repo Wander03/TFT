@@ -1,3 +1,5 @@
+library(shinyWidgets)
+
 server <- function(input, output, session) {
   
   # Reactive value for current set data

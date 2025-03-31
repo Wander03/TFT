@@ -1,3 +1,6 @@
+library(bslib)
+library(shinyWidgets)
+
 ui <- fluidPage(
   theme = bs_theme(bootswatch = "flatly"),
   titlePanel("TFT Team Compositions Generator"),
