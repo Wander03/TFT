@@ -130,21 +130,107 @@ server <- function(input, output, session) {
     HTML(paste(team, collapse = "<br>"))
   })
   
-  # Trait breakdown plot
-  output$trait_plot <- renderPlot({
-    req(compositions())
-    # You would implement your plotting logic here
-    # For example:
-    traits_df <- data.frame(
-      Trait = names(compositions()$balanced$activated_traits),
-      Count = unlist(compositions()$balanced$activated_traits)
-    )
+  # Generate multiple horizontal compositions
+  horizontal_comps <- reactive({
+    req(input$generate)
     
-    ggplot(traits_df, aes(x = reorder(Trait, -Count), y = Count)) +
-      geom_col(fill = "steelblue") +
-      labs(title = "Trait Breakdown", x = "Trait", y = "Count") +
-      theme_minimal() +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+    # Get validated emblems
+    emblems <- c(input$emblem1, input$emblem2, input$emblem3)
+    emblems <- emblems[emblems != "" & emblems != "None"]
+    
+    # Get current set data
+    set_data <- current_set()
+    
+    # Validate we have units to work with
+    if (nrow(set_data$units) == 0) {
+      message("No units available in set data")
+      return(NULL)
+    }
+    
+    # Apply cost limit if specified
+    if (input$horiz_cost_limit < 5) {
+      set_data$units <- set_data$units %>% 
+        filter(cost <= input$horiz_cost_limit)
+      
+      # Check if we still have units after filtering
+      if (nrow(set_data$units) == 0) {
+        message("No units available after cost filtering")
+        return(NULL)
+      }
+    }
+    
+    # Generate multiple compositions with error handling
+    tryCatch({
+      comps <- map(1:5, ~ {
+        set.seed(.x)
+        generate_teams_correct(
+          emblems = emblems,
+          set_data = set_data,
+          strategy = "horizontal",
+          team_size = input$team_size
+        )
+      })
+      
+      # Remove NULL results and duplicates
+      comps <- comps %>% 
+        compact() %>% 
+        unique()
+      
+      # Order by number of activated traits
+      if (length(comps) > 0) {
+        comps[order(-map_dbl(comps, ~ .x$num_activated))]
+      } else {
+        message("No valid compositions generated")
+        NULL
+      }
+    }, error = function(e) {
+      message("Error generating teams: ", e$message)
+      NULL
+    })
+  })
+  
+  # Display the list of horizontal comps
+  output$horizontal_comps_list <- renderUI({
+    comps <- horizontal_comps()
+    
+    if (is.null(comps)) {
+      return(tags$div(
+        class = "alert alert-danger", 
+        "Could not generate team compositions. This might happen if:",
+        tags$ul(
+          tags$li("The cost limit is too restrictive"),
+          tags$li("The selected emblems don't match any traits"),
+          tags$li("There aren't enough units in the selected set")
+        ),
+        "Try adjusting your settings and generating again."
+      ))
+    }
+    
+    tagList(
+      h3("Top Horizontal Compositions", style = "color: #3a5a78;"),
+      map(comps, function(comp) {
+        div(
+          class = "team-comp-container",
+          h4(paste("Variant with", comp$num_activated, "Activated Traits")),
+          
+          h5("Activated Traits:"),
+          if (length(comp$activated_traits) > 0) {
+            tags$ul(
+              map(names(comp$activated_traits), function(trait) {
+                tags$li(paste(trait, ":", comp$activated_traits[[trait]]))
+              })
+            )
+          } else {
+            p("No traits activated")
+          },
+          
+          h5("Team Composition:"),
+          display_team_with_images(comp$team, current_set()),
+          
+          hr()
+        )
+      })
+    )
   })
   
   # Item guide

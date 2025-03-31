@@ -136,6 +136,47 @@ ui <- fluidPage(
       margin: 1px;
       font-size: 11px;
     }
+    
+    .team-comp-container {
+    margin-bottom: 30px;
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border-left: 5px solid #3a5a78;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+  
+  .team-comp-container h4 {
+    color: #3a5a78;
+    margin-top: 0;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 10px;
+  }
+  
+  .team-comp-container ul {
+    margin-top: 5px;
+    margin-bottom: 15px;
+    padding-left: 20px;
+  }
+  
+  .team-comp-container li {
+    margin-bottom: 5px;
+  }
+  
+  .team-comp-container {
+    margin-bottom: 30px;
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border-left: 5px solid #3a5a78;
+  }
+  .alert-danger {
+    padding: 15px;
+    background-color: #f8d7da;
+    border-color: #f5c6cb;
+    color: #721c24;
+    border-radius: 4px;
+  }
 ")),
   
   sidebarLayout(
@@ -216,8 +257,12 @@ ui <- fluidPage(
                    )
                  )
         ),
-        tabPanel("Trait Breakdown",
-                 plotOutput("trait_plot")),
+        tabPanel("Best Horizontal Comps",
+                 wellPanel(
+                   h3("Top Horizontal Compositions", style = "color: #3a5a78;"),
+                   uiOutput("horizontal_comps_list")
+                 )
+        ),
         tabPanel("Item Guide",
                  uiOutput("item_guide"))
       )
