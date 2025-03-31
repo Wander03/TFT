@@ -362,15 +362,15 @@ ui <- fluidPage(
                    )
                  )
         ),
-        tabPanel("Horizontal Compositions",
+        tabPanel("Bronze For Life Compositions",
                  wellPanel(
                    div(style = "display: flex; justify-content: space-between; align-items: center;",
                        h3("Bronze for Life Compositions", style = "color: #4a7c59;"),
                        numericInput("ga_iterations_horizontal", 
                                     label = NULL,
-                                    value = 3,
+                                    value = 50,
                                     min = 1, 
-                                    max = 20,
+                                    max = 100,
                                     step = 1,
                                     width = '100px')
                    ),
