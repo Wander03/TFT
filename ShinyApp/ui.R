@@ -1,8 +1,3 @@
-library(shiny)
-library(shinyWidgets)
-library(bslib)
-library(DT)
-
 ui <- fluidPage(
   theme = bs_theme(bootswatch = "flatly"),
   titlePanel("TFT Team Compositions Generator"),
@@ -177,6 +172,97 @@ ui <- fluidPage(
     color: #721c24;
     border-radius: 4px;
   }
+  
+  /* Selectable unit cards */
+  .champion-container {
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  
+  .champion-container:hover {
+    transform: scale(1.05);
+  }
+  
+  /* Selected unit style */
+  .champion-container.selected {
+    border: 2px solid gold;
+    border-radius: 8px;
+    box-shadow: 0 0 10px gold;
+  }
+  
+  /* Cost headers */
+  h4 {
+    color: #3a5a78;
+    margin-bottom: 15px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid #ddd;
+  }
+  
+  /* Deselect All button styling */
+  .btn-danger {
+    background-color: #dc3545;
+    border-color: #dc3545;
+    color: white;
+    font-weight: bold;
+    padding: 5px 10px;
+    margin-bottom: 15px;
+  }
+  
+  .btn-danger:hover {
+    background-color: #c82333;
+    border-color: #bd2130;
+  }
+  
+  /* Horizontal compositions styling */
+  .team-comp-container {
+    margin-bottom: 30px;
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border-left: 5px solid #3a5a78;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+  
+  .team-comp-container h4 {
+    color: #3a5a78;
+    margin-top: 0;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 10px;
+  }
+  
+  .alert-warning {
+    padding: 15px;
+    background-color: #fff3cd;
+    border-color: #ffeeba;
+    color: #856404;
+    border-radius: 4px;
+  }
+  
+  /* Style for the number of comps input */
+  #num_horizontal_comps {
+    width: 80px;
+    margin-left: 10px;
+  }
+  
+  /* Horizontal tab header styling */
+  #horizontal-comps .well-panel {
+    padding: 15px;
+  }
+  
+  #horizontal-comps .well-panel > div {
+    margin-bottom: 15px;
+  }
+  
+  /* Numeric input in header */
+  #ga_iterations_horizontal {
+    width: 80px;
+    margin-left: 10px;
+  }
+  
+  #ga_iterations_horizontal .form-control {
+    height: 34px;
+    padding: 6px 12px;
+  }
 ")),
   
   sidebarLayout(
@@ -191,7 +277,6 @@ ui <- fluidPage(
       numericInput("team_size", "Team Size", 
                    value = 8, min = 1, max = 10, step = 1),
       
-      h4("Horizontal Comp Cost Limit"),
       pickerInput("horiz_cost_limit", "Max Unit Cost (BFL Only):",
                   choices = c("No limit" = 5, 1, 2, 3, 4, 5),
                   selected = 5,
@@ -227,11 +312,41 @@ ui <- fluidPage(
     mainPanel(
       width = 9,
       tabsetPanel(
-        tabPanel("Compositions",
+        id = "tabs",
+        tabPanel("Unit Selection",
                  fluidRow(
-                   column(6,
+                   column(12,
                           wellPanel(
-                            h3("Vertical Approach", style = "color: #4a7c59;"),
+                            div(style = "display: flex; justify-content: space-between; align-items: center;",
+                                h3("Select Units to Force in Compositions"),
+                                actionButton("deselect_all", "Deselect All", 
+                                             class = "btn-danger",
+                                             icon = icon("times-circle"))
+                            ),
+                            # Cost 1 Units
+                            h4("1-Cost Units", style = "margin-top: 20px;"),
+                            uiOutput("cost1_units"),
+                            # Cost 2 Units
+                            h4("2-Cost Units", style = "margin-top: 20px;"),
+                            uiOutput("cost2_units"),
+                            # Cost 3 Units
+                            h4("3-Cost Units", style = "margin-top: 20px;"),
+                            uiOutput("cost3_units"),
+                            # Cost 4 Units
+                            h4("4-Cost Units", style = "margin-top: 20px;"),
+                            uiOutput("cost4_units"),
+                            # Cost 5 Units
+                            h4("5-Cost Units", style = "margin-top: 20px;"),
+                            uiOutput("cost5_units")
+                          )
+                   )
+                 )
+        ),
+        tabPanel("Vertical Composition",
+                 fluidRow(
+                   column(12,
+                          wellPanel(
+                            h3("Best Vertical Composition", style = "color: #4a7c59;"),
                             h4("Primary Trait:", style = "font-weight: bold;"),
                             textOutput("primary_trait"),
                             hr(),
@@ -241,30 +356,24 @@ ui <- fluidPage(
                             h4("Team Composition:"),
                             uiOutput("vertical_team")
                           )
-                   ),
-                   column(6,
-                          wellPanel(
-                            h3("Bronze for Life Approach", style = "color: #3a5a78;"),
-                            h4("Number of Activated Traits:", style = "font-weight: bold;"),
-                            textOutput("num_traits"),
-                            hr(),
-                            h4("Activated Traits:"),
-                            uiOutput("balanced_traits"),
-                            hr(),
-                            h4("Team Composition:"),
-                            uiOutput("balanced_team")
-                          )
                    )
                  )
         ),
-        tabPanel("Best Horizontal Comps",
+        tabPanel("Horizontal Compositions",
                  wellPanel(
-                   h3("Top Horizontal Compositions", style = "color: #3a5a78;"),
+                   div(style = "display: flex; justify-content: space-between; align-items: center;",
+                       h3("Bronze for Life Compositions", style = "color: #4a7c59;"),
+                       numericInput("ga_iterations_horizontal", 
+                                    label = NULL,
+                                    value = 3,
+                                    min = 1, 
+                                    max = 20,
+                                    step = 1,
+                                    width = '100px')
+                   ),
                    uiOutput("horizontal_comps_list")
                  )
-        ),
-        tabPanel("Item Guide",
-                 uiOutput("item_guide"))
+        )
       )
     )
   )

@@ -201,8 +201,12 @@ get_unit_specific_traits <- function(units_df) {
   return(trait_counts)
 }
 
+# -----------------------------------------------------------------------------#
+
 # Optimized horizontal composition with correct trait activation
-find_horizontal_comp_correct <- function(emblems, units_df, trait_thresholds, spec_traits, team_size = 8) {
+find_horizontal_comp_correct <- function(emblems, units_df, trait_thresholds, 
+                                         spec_traits, team_size = 8, 
+                                         ga_iterations = 3) {
   # Preprocessing
   units_df <- units_df %>%
     mutate(
@@ -283,10 +287,20 @@ find_horizontal_comp_correct <- function(emblems, units_df, trait_thresholds, sp
     )
   }
   
-  # Run multiple times and take best result
-  results <- map(1:3, ~ find_best_team())
-  best_idx <- which.max(map_dbl(results, ~ .x$num_activated))
-  results[[best_idx]]
+  ## Generate multiple results
+  results <- map(1:ga_iterations, ~ {
+    set.seed(.x)
+    find_best_team()
+  })
+  
+  # Find all teams with maximum activated traits
+  max_activated <- max(map_dbl(results, ~ .x$num_activated))
+  top_comps <- keep(results, ~ .x$num_activated == max_activated)
+  
+  # Remove duplicates (teams with same units regardless of order)
+  unique_comps <- unique(top_comps)
+  
+  return(unique_comps)
 }
 
 # Helper function for team refinement
@@ -327,6 +341,8 @@ try_improve_team <- function(team, units_df, score_team, team_size, emblems, tra
     score = current_score
   )
 }
+
+# -----------------------------------------------------------------------------#
 
 # Optimized vertical composition with correct trait activation
 find_vertical_comp_correct <- function(emblems, units_df, trait_thresholds, spec_traits, team_size = 8, forced_trait = NULL) {
@@ -403,18 +419,32 @@ find_vertical_comp_correct <- function(emblems, units_df, trait_thresholds, spec
 }
 
 # Wrapper function
-generate_teams_correct <- function(emblems, set_data, strategy = "horizontal", team_size = 8, forced_trait = NULL) {
+generate_teams_correct <- function(emblems, set_data, strategy = "horizontal", 
+                                   team_size = 8, forced_trait = NULL, 
+                                   ga_iterations = 3) {
   # Preprocess data
   units_df <- preprocess_units(set_data$units)
   trait_thresholds <- precompute_trait_thresholds(set_data$traits)
   spec_traits <- get_unit_specific_traits(set_data$units)
   
   if (strategy == "horizontal") {
-    find_horizontal_comp_correct(emblems, units_df, trait_thresholds, spec_traits, team_size)
+    find_horizontal_comp_correct(
+      emblems = emblems,
+      units_df = units_df,
+      trait_thresholds = trait_thresholds,
+      spec_traits = spec_traits,
+      team_size = team_size,
+      ga_iterations = ga_iterations
+    )
   } else if (strategy == "vertical") {
-    find_vertical_comp_correct(emblems, units_df, trait_thresholds, spec_traits, team_size, forced_trait)
-  } else {
-    stop("Invalid strategy. Choose 'horizontal' or 'vertical'")
+    find_vertical_comp_correct(
+      emblems = emblems,
+      units_df = units_df,
+      trait_thresholds = trait_thresholds,
+      spec_traits = spec_traits,
+      team_size = team_size,
+      forced_trait = forced_trait
+    )
   }
 }
 
