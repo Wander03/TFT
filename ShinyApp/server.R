@@ -9,7 +9,8 @@ server <- function(input, output, session) {
     switch(input$set_select,
            "Set 11" = get_set_data(11),
            "Set 12" = get_set_data(12),
-           "Set 13" = get_set_data(13))
+           "Set 13" = get_set_data(13),
+           "Set 14" = get_set_data(14))
   })
   
   # Reactive value for selected units

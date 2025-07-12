@@ -273,8 +273,8 @@ ui <- fluidPage(
       width = 3,
       h4("Set Selection"),
       selectInput("set_select", "Choose Set:",
-                  choices = c("Set 11", "Set 12", "Set 13"),
-                  selected = "Set 13"),
+                  choices = c("Set 11", "Set 12", "Set 13", "Set 14"),
+                  selected = "Set 14"),
       
       h4("Team Configuration"),
       numericInput("team_size", "Team Size", 

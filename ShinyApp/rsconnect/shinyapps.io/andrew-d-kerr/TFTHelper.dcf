@@ -5,7 +5,7 @@ account: andrew-d-kerr
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 14380687
-bundleId: 10029450
+bundleId: 10059761
 url: https://andrew-d-kerr.shinyapps.io/TFTHelper/
 version: 1
 asMultiple: FALSE
