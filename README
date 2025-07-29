@@ -2,7 +2,10 @@ API rate limit:
     - 20 requests every 1 second
     - 100 requests every 2 minutes
 
-Match History Data
+Match History Data [CHECK THESE AGAIN]
     - Can only get up to 200 match ids at a time 
     - Stores last 2 years OR last 1,000 matches, whichever is smaller :(
     - The creation date timestamps in milliseconds (not seconds)
+
+/tft/league/v1/entries/{tier}/{division}
+    - Can't tell how many pages of players for each tier/division combo
